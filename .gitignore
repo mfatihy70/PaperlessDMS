@@ -1,0 +1,67 @@
+# ==============================================================================
+# OS & Environment
+# ==============================================================================
+.DS_Store
+Thumbs.db
+*.swp
+*.env
+*.env.local
+
+# ==============================================================================
+# IDEs & Editors (VS Code / JetBrains / Visual Studio)
+# ==============================================================================
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# ==============================================================================
+# .NET / C# (Backend)
+# ==============================================================================
+**/[Oo]bj/
+**/[Bb]in/
+[Ll]og/
+[Ll]ogs/
+*.userprefs
+*.pidb
+*.booproj
+*.svclog
+
+# Test results & code coverage
+TestResults/
+*.trx
+coverage/
+*.cobertura.xml
+
+# Entity Framework & User Secrets
+appsettings.Development.json
+secrets.json
+
+# ==============================================================================
+# Node & Angular (Frontend)
+# ==============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Angular build outputs & caches
+.angular/
+dist/
+tmp/
+out-tsc/
+.sass-cache/
+
+# ==============================================================================
+# Docker & Local Data Persistence
+# ==============================================================================
+# If you ever mount local folders for PostgreSQL or MinIO volumes
+postgres_data/
+minio_data/
+elasticsearch_data/
