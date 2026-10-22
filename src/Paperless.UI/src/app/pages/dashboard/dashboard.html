@@ -1,0 +1,81 @@
+<!-- Floating Viewport-Top Notifications -->
+<div class="toast-container-top">
+  @if (errorMessage()) {
+    <div
+      class="alert alert-danger alert-dismissible fade show shadow-lg d-flex align-items-center mb-2"
+      role="alert"
+    >
+      <i class="bi bi-exclamation-triangle-fill fs-5 me-2"></i>
+      <div class="flex-grow-1">{{ errorMessage() }}</div>
+      <button
+        type="button"
+        class="btn-close ms-2"
+        (click)="errorMessage.set('')"
+        aria-label="Close"
+      ></button>
+    </div>
+  }
+  @if (successMessage()) {
+    <div
+      class="alert alert-success alert-dismissible fade show shadow-lg d-flex align-items-center mb-2"
+      role="alert"
+    >
+      <i class="bi bi-check-circle-fill fs-5 me-2"></i>
+      <div class="flex-grow-1">{{ successMessage() }}</div>
+      <button
+        type="button"
+        class="btn-close ms-2"
+        (click)="successMessage.set('')"
+        aria-label="Close"
+      ></button>
+    </div>
+  }
+</div>
+
+<!-- Page Header -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="h3 fw-bold text-dark mb-1">Documents Dashboard</h1>
+    <p class="text-muted small mb-0">Manage archived files, categories, and metadata</p>
+  </div>
+  <button
+    class="btn btn-outline-primary btn-sm d-flex align-items-center"
+    (click)="loadData()"
+    [disabled]="isLoading()"
+  >
+    @if (isLoading()) {
+      <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+    }
+    {{ isLoading() ? 'Loading...' : 'Refresh Data' }}
+  </button>
+</div>
+
+<!-- Forms and Table components below remain unchanged -->
+<div class="row g-4 mb-4">
+  <div class="col-lg-8">
+    <app-document-form
+      [categories]="categories()"
+      [isSaving]="isSavingDoc()"
+      (saveDocument)="handleUpload($event)"
+    />
+  </div>
+  <div class="col-lg-4">
+    <app-category-form
+      [categories]="categories()"
+      [isSaving]="isSavingCat()"
+      (saveCategory)="handleCreateCategory($event)"
+      (editCategory)="handleEditCategory($event)"
+      (deleteCategory)="handleDeleteCategory($event)"
+    />
+  </div>
+</div>
+
+<app-document-table
+  [documents]="filteredDocuments()"
+  [categories]="categories()"
+  [selectedCategoryId]="selectedCatId()"
+  [isLoading]="isLoading()"
+  (searchChange)="onSearch($event)"
+  (categoryFilterChange)="onFilterCategory($event)"
+  (delete)="handleDeleteDocument($event)"
+/>

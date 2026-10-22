@@ -1,0 +1,105 @@
+<div class="card shadow-sm border-0 h-100">
+  <div class="card-body">
+    <h5 class="card-title fw-bold text-dark mb-3">Categories</h5>
+
+    <!-- Create Form -->
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" class="mb-4">
+      <div class="mb-2">
+        <label class="form-label small fw-semibold">New Category *</label>
+        <input
+          type="text"
+          formControlName="name"
+          class="form-control form-control-sm"
+          placeholder="e.g. Invoices"
+        />
+        @if (form.get('name')?.touched && form.get('name')?.invalid) {
+          <div class="text-danger small mt-1">Name required (2-50 chars).</div>
+        }
+      </div>
+
+      <div class="mb-2">
+        <label class="form-label small fw-semibold">Description</label>
+        <input
+          type="text"
+          formControlName="description"
+          class="form-control form-control-sm"
+          placeholder="e.g. Monthly bills"
+        />
+      </div>
+
+      <button
+        type="submit"
+        class="btn btn-outline-secondary btn-sm w-100"
+        [disabled]="form.invalid || isSaving()"
+      >
+        @if (isSaving()) {
+          <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+        }
+        Add Category
+      </button>
+    </form>
+
+    <!-- Categories List with Edit/Delete -->
+    <h6 class="small fw-bold text-secondary text-uppercase mb-2">Existing Categories</h6>
+    <div class="category-list overflow-auto">
+      @for (cat of categories(); track cat.id) {
+        <div class="category-item p-2 mb-2 border rounded bg-light">
+          @if (editingId === cat.id) {
+            <form [formGroup]="editForm" (ngSubmit)="submitEdit(cat.id)">
+              <input type="text" formControlName="name" class="form-control form-control-sm mb-1" />
+              <input
+                type="text"
+                formControlName="description"
+                class="form-control form-control-sm mb-2"
+                placeholder="Description"
+              />
+              <div class="d-flex gap-1 justify-content-end">
+                <button
+                  type="submit"
+                  class="btn btn-primary btn-sm py-0 px-2"
+                  [disabled]="editForm.invalid"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm py-0 px-2"
+                  (click)="cancelEdit()"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          } @else {
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <strong class="text-dark small d-block">{{ cat.name }}</strong>
+                @if (cat.description) {
+                  <span class="text-muted extra-small d-block">{{ cat.description }}</span>
+                }
+              </div>
+              <div class="btn-group btn-group-sm">
+                <button
+                  type="button"
+                  class="btn btn-link text-secondary p-0 me-2"
+                  (click)="startEdit(cat)"
+                >
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-link text-danger p-0"
+                  (click)="onDelete(cat.id)"
+                >
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      } @empty {
+        <p class="text-muted extra-small mb-0">No categories created yet.</p>
+      }
+    </div>
+  </div>
+</div>

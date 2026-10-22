@@ -37,8 +37,13 @@ export interface CreateCategoryDto {
   description?: string;
 }
 
+export interface UpdateCategoryDto {
+  name: string;
+  description?: string;
+}
+
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class DocumentService {
   private readonly docsUrl = '/api/documents';
@@ -46,9 +51,13 @@ export class DocumentService {
 
   constructor(private http: HttpClient) {}
 
-  // --- Document Operations ---
+  // Documents
   getDocuments(): Observable<DocumentItem[]> {
     return this.http.get<DocumentItem[]>(this.docsUrl);
+  }
+
+  getDocumentById(id: number): Observable<DocumentItem> {
+    return this.http.get<DocumentItem>(`${this.docsUrl}/${id}`);
   }
 
   createDocument(doc: CreateDocumentDto): Observable<DocumentItem> {
@@ -63,12 +72,20 @@ export class DocumentService {
     return this.http.delete<void>(`${this.docsUrl}/${id}`);
   }
 
-  // --- Category Operations ---
+  // Categories
   getCategories(): Observable<CategoryItem[]> {
     return this.http.get<CategoryItem[]>(this.catsUrl);
   }
 
   createCategory(cat: CreateCategoryDto): Observable<CategoryItem> {
     return this.http.post<CategoryItem>(this.catsUrl, cat);
+  }
+
+  updateCategory(id: number, cat: UpdateCategoryDto): Observable<void> {
+    return this.http.put<void>(`${this.catsUrl}/${id}`, cat);
+  }
+
+  deleteCategory(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.catsUrl}/${id}`);
   }
 }

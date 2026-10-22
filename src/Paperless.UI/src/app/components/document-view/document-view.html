@@ -1,0 +1,35 @@
+<div class="row g-4">
+  <div class="col-sm-6 col-md-4">
+    <div class="text-muted small text-uppercase fw-semibold">File Name</div>
+    <div class="fs-6 text-dark mt-1">{{ document().fileName }}</div>
+  </div>
+  <div class="col-sm-6 col-md-4">
+    <div class="text-muted small text-uppercase fw-semibold">Content Type</div>
+    <div class="fs-6 text-dark mt-1">{{ document().contentType }}</div>
+  </div>
+  <div class="col-sm-6 col-md-4">
+    <div class="text-muted small text-uppercase fw-semibold">File Size</div>
+    <div class="fs-6 text-dark mt-1">
+      {{ document().fileSizeBytes / 1024 | number: '1.2-2' }} KB
+    </div>
+  </div>
+  <div class="col-sm-6 col-md-4">
+    <div class="text-muted small text-uppercase fw-semibold">Created Date</div>
+    <div class="fs-6 text-dark mt-1">{{ document().createdAt | date: 'medium' }}</div>
+  </div>
+  <div class="col-sm-6 col-md-4">
+    <div class="text-muted small text-uppercase fw-semibold">Category</div>
+    <div class="mt-1">
+      <span
+        class="badge"
+        [class.bg-primary-subtle]="document().categoryName"
+        [class.text-primary]="document().categoryName"
+        [class.border]="true"
+        [class.bg-light]="!document().categoryName"
+        [class.text-muted]="!document().categoryName"
+      >
+        {{ document().categoryName || 'Unassigned' }}
+      </span>
+    </div>
+  </div>
+</div>

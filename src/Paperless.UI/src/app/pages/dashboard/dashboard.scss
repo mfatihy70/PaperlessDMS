@@ -1,0 +1,19 @@
+:host {
+  display: block;
+}
+
+.toast-container-top {
+  position: fixed;
+  top: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1080;
+  width: 90%;
+  max-width: 600px;
+  pointer-events: none;
+
+  .alert {
+    pointer-events: auto;
+    border-radius: 8px;
+  }
+}
