@@ -10,6 +10,9 @@
   },
   "private": true,
   "packageManager": "npm@11.13.0",
+  "overrides": {
+    "vite": "^8.3.3"
+  },
   "dependencies": {
     "@angular/common": "^22.2.0",
     "@angular/compiler": "^22.2.0",
@@ -17,6 +20,7 @@
     "@angular/forms": "^22.2.0",
     "@angular/platform-browser": "^22.2.0",
     "@angular/router": "^22.2.0",
+    "@vitest/browser-playwright": "^5.0.5",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },
