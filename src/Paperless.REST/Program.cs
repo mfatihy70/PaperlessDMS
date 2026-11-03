@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi;
 using Paperless.REST.Data;
 using Paperless.REST.Models;
 using Paperless.REST.Repositories;
@@ -11,7 +12,19 @@ builder.Services.AddControllers();
 
 // 2. Add Swagger / OpenAPI
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Paperless REST API",
+        Version = "v1",
+        Description = "Manage document metadata and categories. Document file upload, OCR, " +
+                      "AI summaries and full-text search are not implemented yet."
+    });
+    options.IncludeXmlComments(
+        Path.Combine(AppContext.BaseDirectory, "Paperless.REST.xml"),
+        includeControllerXmlComments: true);
+});
 
 // 3. Database Context
 var connString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -29,8 +42,11 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Paperless REST API v1");
+    c.SwaggerEndpoint("v1/swagger.json", "Paperless REST API v1");
     c.RoutePrefix = "swagger";
+    c.DocumentTitle = "Paperless API Documentation";
+    c.EnableFilter();
+    c.DisplayRequestDuration();
 });
 
 // IMPORTANT: DO NOT call app.UseHttpsRedirection() here!
@@ -49,3 +65,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+// Expose the entry point to integration tests.
+public partial class Program { }
