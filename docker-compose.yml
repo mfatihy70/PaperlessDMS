@@ -32,7 +32,7 @@ services:
   paperless-rest:
     build:
       context: ./src/Paperless.REST
-      dockerfile: Dockerfile
+      dockerfile: dockerfile
     container_name: paperless-rest
     restart: always
     environment:
@@ -47,7 +47,7 @@ services:
   paperless-ui:
     build:
       context: ./src/Paperless.UI
-      dockerfile: Dockerfile
+      dockerfile: dockerfile
     container_name: paperless-ui
     restart: always
     ports:
