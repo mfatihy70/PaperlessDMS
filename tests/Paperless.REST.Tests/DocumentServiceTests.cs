@@ -62,8 +62,12 @@ public class DocumentServiceTests
     {
         _documents.Setup(x => x.GetByIdWithCategoryAsync(7)).ReturnsAsync(new Document
         {
-            Id = 7, Title = "Contract", FileName = "contract.pdf", FileSizeBytes = 2048,
-            CategoryId = 4, Category = new DocumentCategory { Id = 4, Name = "Legal" }
+            Id = 7,
+            Title = "Contract",
+            FileName = "contract.pdf",
+            FileSizeBytes = 2048,
+            CategoryId = 4,
+            Category = new DocumentCategory { Id = 4, Name = "Legal" }
         });
 
         var result = await _service.GetDocumentByIdAsync(7);
@@ -95,9 +99,13 @@ public class DocumentServiceTests
         _documents.Setup(x => x.GetByIdWithCategoryAsync(10))
             .ReturnsAsync(() => new Document
             {
-                Id = saved!.Id, Title = saved.Title, FileName = saved.FileName,
-                ContentType = saved.ContentType, FileSizeBytes = saved.FileSizeBytes,
-                CreatedAt = saved.CreatedAt, CategoryId = saved.CategoryId,
+                Id = saved!.Id,
+                Title = saved.Title,
+                FileName = saved.FileName,
+                ContentType = saved.ContentType,
+                FileSizeBytes = saved.FileSizeBytes,
+                CreatedAt = saved.CreatedAt,
+                CategoryId = saved.CategoryId,
                 Category = new DocumentCategory { Id = 5, Name = "Finance" }
             });
 
