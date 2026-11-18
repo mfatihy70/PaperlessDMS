@@ -15,6 +15,7 @@ describe('DocumentView', () => {
     createdAt: new Date().toISOString(),
     categoryId: 3,
     categoryName: 'Legal',
+    hasFile: true,
   };
 
   beforeEach(async () => {

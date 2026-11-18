@@ -23,6 +23,7 @@ describe('DocumentTable', () => {
       createdAt: '2026-01-01',
       categoryId: 1,
       categoryName: 'Invoices',
+      hasFile: true,
     },
   ];
 

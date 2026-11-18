@@ -1,10 +1,11 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Paperless.REST.DTOs;
 using Paperless.REST.Services;
 
 namespace Paperless.REST.Controllers;
 
-/// <summary>Manage document metadata and category assignments.</summary>
+/// <summary>Manage uploaded documents and their category assignments.</summary>
 [ApiController]
 [Route("api/[controller]")]
 public class DocumentsController : ControllerBase
@@ -18,8 +19,7 @@ public class DocumentsController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>List all documents.</summary>
-    /// <remarks>Returns document metadata including the assigned category name. No file contents are returned.</remarks>
+    /// <summary>List stored documents and their derived file metadata.</summary>
     [HttpGet]
     [ProducesResponseType(typeof(IEnumerable<DocumentResponseDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<DocumentResponseDto>>> GetAll()
@@ -27,77 +27,125 @@ public class DocumentsController : ControllerBase
         return Ok(await _service.GetAllDocumentsAsync());
     }
 
-    /// <summary>Get a document by its ID.</summary>
+    /// <summary>Get a document's metadata by ID.</summary>
     /// <param name="id">The document ID.</param>
     /// <response code="404">No document exists with this ID.</response>
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(DocumentResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<DocumentResponseDto>> GetById(int id)
     {
-        var doc = await _service.GetDocumentByIdAsync(id);
-        if (doc is null) return NotFound();
-        return Ok(doc);
+        var document = await _service.GetDocumentByIdAsync(id);
+        return document is null ? NotFound() : Ok(document);
     }
 
-    /// <summary>Create document metadata.</summary>
+    /// <summary>Upload and store an original document file.</summary>
     /// <remarks>
-    /// Registers metadata only; this endpoint does not upload a file. Use a category ID returned by
-    /// GET /api/Categories, or null to leave the document unassigned. A null contentType defaults to application/pdf.
-    /// Example request:
-    /// <code>
-    /// {
-    ///   "title": "Invoice October 2026",
-    ///   "fileName": "invoice.pdf",
-    ///   "contentType": "application/pdf",
-    ///   "fileSizeBytes": 4096,
-    ///   "categoryId": null
-    /// }
-    /// </code>
+    /// The file name, content type, size, and title are derived from the uploaded file.
+    /// The original bytes are preserved in the database. All file types are accepted up to 25 MiB.
     /// </remarks>
-    /// <param name="dto">The document metadata to create.</param>
-    /// <response code="201">The created metadata. The Location header points to the document.</response>
-    /// <response code="400">The request cannot be bound to the DTO or required values are missing.</response>
+    /// <param name="file">The original file to store.</param>
+    /// <param name="categoryId">An optional category ID.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <response code="201">The document was stored; Location points to its metadata.</response>
+    /// <response code="400">The file is empty, invalid, or exceeds the size limit.</response>
     [HttpPost]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(28_311_552)]
     [ProducesResponseType(typeof(DocumentResponseDto), StatusCodes.Status201Created)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<DocumentResponseDto>> Create([FromBody] CreateDocumentDto dto)
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status413PayloadTooLarge)]
+    public async Task<ActionResult<DocumentResponseDto>> Create(
+        [Required] IFormFile? file,
+        [FromForm] int? categoryId,
+        CancellationToken cancellationToken)
     {
-        var created = await _service.CreateDocumentAsync(dto);
-        _logger.LogInformation("Document {Id} created successfully.", created.Id);
+        if (file is null)
+            return BadRequest(new ProblemDetails { Title = "A file is required", Status = StatusCodes.Status400BadRequest });
+
+        DocumentResponseDto created;
+        try
+        {
+            created = await _service.CreateDocumentAsync(file, categoryId, cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning("Rejected document upload: {Reason}", ex.Message);
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid document upload",
+                Detail = ex.Message,
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        _logger.LogInformation("Document {Id} uploaded successfully.", created.Id);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
-    /// <summary>Update a document's title and category.</summary>
-    /// <remarks>Set categoryId to null to remove the category assignment. File metadata is not changed.</remarks>
+    /// <summary>Download a document's original file bytes.</summary>
     /// <param name="id">The document ID.</param>
-    /// <param name="dto">The new title and category assignment.</param>
-    /// <response code="204">The document was updated successfully.</response>
-    /// <response code="404">No document exists with this ID.</response>
-    [HttpPut("{id}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    /// <response code="404">No stored file exists with this ID.</response>
+    [HttpGet("{id}/file")]
+    [Produces("application/octet-stream")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> Update(int id, [FromBody] UpdateDocumentDto dto)
+    public async Task<IActionResult> GetFile(int id)
     {
-        var updated = await _service.UpdateDocumentAsync(id, dto);
-        if (!updated) return NotFound();
-        return NoContent();
+        var file = await _service.GetDocumentFileAsync(id);
+        return file is null
+            ? NotFound()
+            : File(file.Content, file.ContentType, file.FileName);
     }
 
-    /// <summary>Delete document metadata.</summary>
+    /// <summary>Replace a document's original file and/or update its category.</summary>
     /// <param name="id">The document ID.</param>
-    /// <response code="204">The document metadata was deleted successfully.</response>
+    /// <param name="file">An optional replacement file.</param>
+    /// <param name="categoryId">The category ID, or empty to leave unassigned.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <response code="204">The document was updated.</response>
+    /// <response code="400">The replacement file is invalid or exceeds the size limit.</response>
+    /// <response code="404">No document exists with this ID.</response>
+    [HttpPut("{id}")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(28_311_552)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status413PayloadTooLarge)]
+    public async Task<IActionResult> Update(
+        int id,
+        IFormFile? file,
+        [FromForm] int? categoryId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var updated = await _service.UpdateDocumentAsync(id, file, categoryId, cancellationToken);
+            return updated ? NoContent() : NotFound();
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning("Rejected document update for {Id}: {Reason}", id, ex.Message);
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid document upload",
+                Detail = ex.Message,
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+    }
+
+    /// <summary>Delete a document and its stored file.</summary>
+    /// <param name="id">The document ID.</param>
+    /// <response code="204">The document was deleted.</response>
     /// <response code="404">No document exists with this ID.</response>
     [HttpDelete("{id}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Delete(int id)
     {
         var deleted = await _service.DeleteDocumentAsync(id);
-        if (!deleted) return NotFound();
-        return NoContent();
+        return deleted ? NoContent() : NotFound();
     }
 }

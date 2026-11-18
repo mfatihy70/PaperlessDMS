@@ -33,6 +33,7 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
         string[] expected =
         [
             "get /api/Documents", "get /api/Documents/{id}", "post /api/Documents",
+            "get /api/Documents/{id}/file",
             "put /api/Documents/{id}", "delete /api/Documents/{id}",
             "get /api/Categories", "post /api/Categories"
         ];
@@ -45,10 +46,11 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
 
     [Theory]
     [InlineData("/api/Documents", "get", "200")]
-    [InlineData("/api/Documents/{id}", "get", "200,400,404")]
-    [InlineData("/api/Documents", "post", "201,400")]
-    [InlineData("/api/Documents/{id}", "put", "204,400,404")]
-    [InlineData("/api/Documents/{id}", "delete", "204,400,404")]
+    [InlineData("/api/Documents/{id}", "get", "200,404")]
+    [InlineData("/api/Documents", "post", "201,400,413")]
+    [InlineData("/api/Documents/{id}/file", "get", "200,404")]
+    [InlineData("/api/Documents/{id}", "put", "204,400,404,413")]
+    [InlineData("/api/Documents/{id}", "delete", "204,404")]
     [InlineData("/api/Categories", "get", "200")]
     [InlineData("/api/Categories", "post", "201,400")]
     public async Task OpenApi_DescribesActualResponseCodes(string path, string method, string expectedCodes)
@@ -62,8 +64,6 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
     }
 
     [Theory]
-    [InlineData("CreateDocumentDto")]
-    [InlineData("UpdateDocumentDto")]
     [InlineData("DocumentResponseDto")]
     [InlineData("CreateCategoryDto")]
     [InlineData("CategoryResponseDto")]
@@ -103,7 +103,6 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
     }
 
     [Theory]
-    [InlineData("/api/Documents")]
     [InlineData("/api/Categories")]
     public async Task MalformedRequest_ReturnsDocumentedValidationProblem(string path)
     {
@@ -125,7 +124,7 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
                 {
                     var context = new Mock<PaperlessDbContext>(new DbContextOptions<PaperlessDbContext>());
                     var database = new Mock<DatabaseFacade>(context.Object);
-                    database.Setup(db => db.EnsureCreated()).Returns(false);
+                    database.Setup(db => db.EnsureCreated()).Returns(true);
                     context.SetupGet(db => db.Database).Returns(database.Object);
                     return context.Object;
                 });

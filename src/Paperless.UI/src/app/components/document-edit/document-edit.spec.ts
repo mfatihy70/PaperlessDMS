@@ -15,6 +15,7 @@ describe('DocumentEdit', () => {
     fileSizeBytes: 1024,
     createdAt: '2026-01-01',
     categoryId: 2,
+    hasFile: true,
   };
 
   beforeEach(async () => {
@@ -31,22 +32,22 @@ describe('DocumentEdit', () => {
     fixture.detectChanges();
   });
 
-  it('should create and populate form with current document values', () => {
+  it('should create and populate the current category', () => {
     expect(component).toBeTruthy();
-    expect(component.form.get('title')?.value).toBe('Quarterly Report');
     expect(component.form.get('categoryId')?.value).toBe(2);
   });
 
-  it('should emit save with updated DTO when valid', () => {
+  it('should emit a replacement file and category', () => {
     const emitSpy = vi.spyOn(component.save, 'emit');
+    const file = new File(['updated'], 'updated.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    });
+    component.onFileSelected({ target: { files: [file], value: '' } } as unknown as Event);
 
-    component.form.patchValue({ title: 'Annual Report 2026', categoryId: null });
+    component.form.patchValue({ categoryId: null });
     component.onSubmit();
 
-    expect(emitSpy).toHaveBeenCalledWith({
-      title: 'Annual Report 2026',
-      categoryId: null,
-    });
+    expect(emitSpy).toHaveBeenCalledWith({ file, categoryId: null });
   });
 
   it('should emit cancel event when cancel is called', () => {

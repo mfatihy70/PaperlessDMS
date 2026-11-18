@@ -19,63 +19,37 @@ describe('DocumentForm', () => {
     fixture.detectChanges();
   });
 
-  it('should create and initialize an invalid form', () => {
-    expect(component).toBeTruthy();
-    expect(component.form.valid).toBeFalsy();
-  });
-
-  it('should reject invalid file extensions and accept allowed formats', () => {
-    const fileCtrl = component.form.get('fileName');
-
-    fileCtrl?.setValue('malicious.exe');
-    expect(fileCtrl?.valid).toBeFalsy();
-
-    fileCtrl?.setValue('archive.zip');
-    expect(fileCtrl?.valid).toBeFalsy();
-
-    fileCtrl?.setValue('scan.pdf');
-    expect(fileCtrl?.valid).toBe(true);
-  });
-
-  it('should require title between 3 and 100 characters', () => {
-    const titleCtrl = component.form.get('title');
-
-    titleCtrl?.setValue('');
-    expect(titleCtrl?.hasError('required')).toBe(true);
-
-    titleCtrl?.setValue('ab');
-    expect(titleCtrl?.hasError('minlength')).toBe(true);
-
-    titleCtrl?.setValue('Valid Document Title');
-    expect(titleCtrl?.valid).toBe(true);
-  });
-
-  it('should emit saveDocument when submitting a valid form', () => {
-    const emitSpy = vi.spyOn(component.saveDocument, 'emit');
-
-    component.form.setValue({
-      title: 'Valid Contract',
-      fileName: 'contract.pdf',
-      fileSizeBytes: 2048,
-      categoryId: 1,
+  it('should accept a selected ODT file and emit the original File', () => {
+    const file = new File(['archive'], 'report.odt', {
+      type: 'application/vnd.oasis.opendocument.text',
     });
-    fixture.detectChanges();
+    component.onFileSelected({ target: { files: [file], value: '' } } as unknown as Event);
 
+    const emitSpy = vi.spyOn(component.saveDocument, 'emit');
+    component.form.patchValue({ categoryId: 1 });
     component.onSubmit();
 
-    expect(emitSpy).toHaveBeenCalledWith({
-      title: 'Valid Contract',
-      fileName: 'contract.pdf',
-      fileSizeBytes: 2048,
-      categoryId: 1,
-    });
+    expect(emitSpy).toHaveBeenCalledWith({ file, categoryId: 1 });
   });
 
-  it('should reset form values when reset() is called', () => {
-    component.form.patchValue({ title: 'Temporary Title' });
+  it('should reject empty files and require a file before submitting', () => {
+    const input = { files: [new File([], 'empty.pdf')], value: 'empty.pdf' };
+    component.onFileSelected({ target: input } as unknown as Event);
+    expect(component.selectedFile()).toBeNull();
+    expect(component.fileError()).toContain('empty');
+
+    component.onSubmit();
+    expect(component.fileError()).toContain('Choose a file');
+  });
+
+  it('should reset the selected file and category', () => {
+    const file = new File(['text'], 'notes.md', { type: 'text/markdown' });
+    component.onFileSelected({ target: { files: [file], value: '' } } as unknown as Event);
+    component.form.patchValue({ categoryId: 1 });
+
     component.reset();
 
-    expect(component.form.get('title')?.value).toBeNull();
-    expect(component.form.get('fileSizeBytes')?.value).toBe(1024);
+    expect(component.selectedFile()).toBeNull();
+    expect(component.form.get('categoryId')?.value).toBeNull();
   });
 });

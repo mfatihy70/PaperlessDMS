@@ -5,8 +5,6 @@ import {
   DocumentService,
   DocumentItem,
   CategoryItem,
-  CreateDocumentDto,
-  UpdateDocumentDto,
   CreateCategoryDto,
   UpdateCategoryDto,
 } from './document.service';
@@ -42,6 +40,7 @@ describe('DocumentService', () => {
           contentType: 'application/pdf',
           fileSizeBytes: 1024,
           createdAt: '2026-01-01',
+          hasFile: true,
         },
       ];
 
@@ -63,6 +62,7 @@ describe('DocumentService', () => {
         contentType: 'application/pdf',
         fileSizeBytes: 2048,
         createdAt: '2026-01-01',
+        hasFile: true,
       };
 
       service.getDocumentById(5).subscribe((doc) => {
@@ -75,38 +75,45 @@ describe('DocumentService', () => {
       req.flush(mockDoc);
     });
 
-    it('createDocument() should send POST /api/documents with payload', () => {
-      const newDoc: CreateDocumentDto = {
-        title: 'New Doc',
-        fileName: 'new.pdf',
-        fileSizeBytes: 500,
-        categoryId: null,
-      };
-      const responseDoc: DocumentItem = {
-        id: 10,
-        ...newDoc,
-        contentType: 'application/pdf',
-        createdAt: '2026-01-01',
-      };
+    it('uploadDocument() sends the original file and category as multipart data', () => {
+      const file = new File(['bytes'], 'document.odt', {
+        type: 'application/vnd.oasis.opendocument.text',
+      });
 
-      service.createDocument(newDoc).subscribe((res) => {
+      service.uploadDocument(file, 3).subscribe((res) => {
         expect(res.id).toBe(10);
       });
 
       const req = httpMock.expectOne('/api/documents');
       expect(req.request.method).toBe('POST');
-      expect(req.request.body).toEqual(newDoc);
-      req.flush(responseDoc);
+      req.flush({
+        id: 10,
+        title: 'document',
+        fileName: file.name,
+        contentType: file.type,
+        fileSizeBytes: file.size,
+        createdAt: '2026-01-01',
+        categoryId: 3,
+        hasFile: true,
+      });
+      expect(req.request.body).toBeInstanceOf(FormData);
+      const uploadedFile = (req.request.body as FormData).get('file') as File;
+      expect(uploadedFile.name).toBe(file.name);
+      expect(uploadedFile.size).toBe(file.size);
+      expect((req.request.body as FormData).get('categoryId')).toBe('3');
     });
 
-    it('updateDocument() should send PUT /api/documents/:id', () => {
-      const updatePayload: UpdateDocumentDto = { title: 'Updated Title', categoryId: 2 };
+    it('updateDocument() sends an optional replacement file and category', () => {
+      const file = new File(['text'], 'updated.md', { type: 'text/markdown' });
 
-      service.updateDocument(10, updatePayload).subscribe();
+      service.updateDocument(10, file, null).subscribe();
 
       const req = httpMock.expectOne('/api/documents/10');
       expect(req.request.method).toBe('PUT');
-      expect(req.request.body).toEqual(updatePayload);
+      const replacementFile = (req.request.body as FormData).get('file') as File;
+      expect(replacementFile.name).toBe(file.name);
+      expect(replacementFile.size).toBe(file.size);
+      expect((req.request.body as FormData).get('categoryId')).toBe('');
       req.flush(null);
     });
 

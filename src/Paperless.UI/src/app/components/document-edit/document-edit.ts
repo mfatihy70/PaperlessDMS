@@ -1,11 +1,21 @@
-import { Component, input, output, OnInit, effect } from '@angular/core';
-import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { DocumentItem, CategoryItem, UpdateDocumentDto } from '../../services/document.service';
+import { Component, input, output, OnInit, effect, signal } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
+import { ReactiveFormsModule, FormBuilder, FormGroup } from '@angular/forms';
+import {
+  DocumentItem,
+  CategoryItem,
+  MAX_DOCUMENT_SIZE_BYTES,
+} from '../../services/document.service';
+
+export interface DocumentEditValue {
+  file: File | null;
+  categoryId: number | null;
+}
 
 @Component({
   selector: 'app-document-edit',
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, DecimalPipe],
   templateUrl: './document-edit.html',
   styleUrls: ['./document-edit.scss'],
 })
@@ -14,38 +24,56 @@ export class DocumentEdit implements OnInit {
   categories = input.required<CategoryItem[]>();
   isSaving = input<boolean>(false);
 
-  save = output<UpdateDocumentDto>();
+  save = output<DocumentEditValue>();
   cancel = output<void>();
 
   form!: FormGroup;
+  selectedFile = signal<File | null>(null);
+  fileError = signal<string | null>(null);
 
   constructor(private fb: FormBuilder) {
     effect(() => {
       const doc = this.document();
       if (this.form && doc) {
-        this.form.patchValue({
-          title: doc.title,
-          categoryId: doc.categoryId ?? null,
-        });
+        this.form.patchValue({ categoryId: doc.categoryId ?? null });
       }
     });
   }
 
   ngOnInit(): void {
     this.form = this.fb.group({
-      title: [
-        this.document().title,
-        [Validators.required, Validators.minLength(3), Validators.maxLength(100)],
-      ],
       categoryId: [this.document().categoryId ?? null],
     });
   }
 
-  onSubmit(): void {
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
+  onFileSelected(event: Event): void {
+    const inputEl = event.target as HTMLInputElement;
+    const file = inputEl.files?.[0] ?? null;
+    this.fileError.set(null);
+    if (!file) return;
+
+    if (file.size === 0) {
+      this.fileError.set('The selected file is empty.');
+      inputEl.value = '';
       return;
     }
-    this.save.emit(this.form.value);
+    if (file.size > MAX_DOCUMENT_SIZE_BYTES) {
+      this.fileError.set('The file is larger than 25 MiB.');
+      inputEl.value = '';
+      return;
+    }
+    this.selectedFile.set(file);
+  }
+
+  removeFile(): void {
+    this.selectedFile.set(null);
+    this.fileError.set(null);
+  }
+
+  onSubmit(): void {
+    this.save.emit({
+      file: this.selectedFile(),
+      categoryId: this.form.get('categoryId')?.value ?? null,
+    });
   }
 }

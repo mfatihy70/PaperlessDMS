@@ -1,77 +1,155 @@
+using System.Net.Http.Headers;
+using Microsoft.AspNetCore.Http;
 using Paperless.REST.DTOs;
 using Paperless.REST.Models;
 using Paperless.REST.Repositories;
 
 namespace Paperless.REST.Services;
 
-public class DocumentService : IDocumentService
+public sealed class DocumentService : IDocumentService
 {
-    private readonly IDocumentRepository _docRepo;
-    private readonly IRepository<DocumentCategory> _catRepo;
+    public const long MaxDocumentSizeBytes = 25 * 1024 * 1024;
 
-    public DocumentService(IDocumentRepository docRepo, IRepository<DocumentCategory> catRepo)
+    private readonly IDocumentRepository _docRepo;
+
+    public DocumentService(IDocumentRepository docRepo)
     {
         _docRepo = docRepo;
-        _catRepo = catRepo;
     }
 
     public async Task<IEnumerable<DocumentResponseDto>> GetAllDocumentsAsync()
     {
-        var docs = await _docRepo.GetAllWithCategoriesAsync();
-        return docs.Select(d => new DocumentResponseDto(
-            d.Id, d.Title, d.FileName, d.ContentType, d.FileSizeBytes, d.CreatedAt, d.CategoryId, d.Category?.Name));
+        var documents = await _docRepo.GetAllWithCategoriesAsync();
+        return documents.Select(ToResponse);
     }
 
     public async Task<DocumentResponseDto?> GetDocumentByIdAsync(int id)
     {
-        var d = await _docRepo.GetByIdWithCategoryAsync(id);
-        if (d is null) return null;
-        return new DocumentResponseDto(
-            d.Id, d.Title, d.FileName, d.ContentType, d.FileSizeBytes, d.CreatedAt, d.CategoryId, d.Category?.Name);
+        var document = await _docRepo.GetByIdWithCategoryAsync(id);
+        return document is null ? null : ToResponse(document);
     }
 
-    public async Task<DocumentResponseDto> CreateDocumentAsync(CreateDocumentDto dto)
+    public async Task<DocumentResponseDto> CreateDocumentAsync(
+        IFormFile file,
+        int? categoryId,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(dto.Title))
-            throw new ArgumentException("Title cannot be empty");
+        var uploadedFile = await ReadUploadAsync(file, cancellationToken);
+        var title = Path.GetFileNameWithoutExtension(uploadedFile.FileName);
+        if (string.IsNullOrWhiteSpace(title))
+            title = uploadedFile.FileName;
 
-        var doc = new Document
+        var document = new Document
         {
-            Title = dto.Title,
-            FileName = dto.FileName,
-            ContentType = dto.ContentType ?? "application/pdf",
-            FileSizeBytes = dto.FileSizeBytes,
-            CategoryId = dto.CategoryId,
+            Title = title.Length > 255 ? title[..255] : title,
+            FileName = uploadedFile.FileName,
+            ContentType = uploadedFile.ContentType,
+            FileSizeBytes = uploadedFile.Content.Length,
+            FileContent = uploadedFile.Content,
+            CategoryId = categoryId,
             CreatedAt = DateTime.UtcNow
         };
 
-        await _docRepo.AddAsync(doc);
+        await _docRepo.AddAsync(document);
         await _docRepo.SaveChangesAsync();
 
-        var created = await _docRepo.GetByIdWithCategoryAsync(doc.Id);
-        return new DocumentResponseDto(
-            created!.Id, created.Title, created.FileName, created.ContentType, created.FileSizeBytes, created.CreatedAt, created.CategoryId, created.Category?.Name);
+        var created = await _docRepo.GetByIdWithCategoryAsync(document.Id);
+        return ToResponse(created!);
     }
 
-    public async Task<bool> UpdateDocumentAsync(int id, UpdateDocumentDto dto)
+    public async Task<DocumentFileDto?> GetDocumentFileAsync(int id)
     {
-        var doc = await _docRepo.GetByIdAsync(id);
-        if (doc is null) return false;
+        var document = await _docRepo.GetByIdAsync(id);
+        var content = document?.FileContent;
+        if (document is null || content is not { Length: > 0 })
+            return null;
 
-        doc.Title = dto.Title;
-        doc.CategoryId = dto.CategoryId;
-        _docRepo.Update(doc);
+        return new DocumentFileDto(document.FileName, document.ContentType, content);
+    }
+
+    public async Task<bool> UpdateDocumentAsync(
+        int id,
+        IFormFile? file,
+        int? categoryId,
+        CancellationToken cancellationToken)
+    {
+        var document = await _docRepo.GetByIdAsync(id);
+        if (document is null)
+            return false;
+
+        var uploadedFile = file is null
+            ? null
+            : await ReadUploadAsync(file, cancellationToken);
+
+        if (uploadedFile is not null)
+        {
+            var title = Path.GetFileNameWithoutExtension(uploadedFile.FileName);
+            document.Title = string.IsNullOrWhiteSpace(title)
+                ? uploadedFile.FileName
+                : title.Length > 255 ? title[..255] : title;
+            document.FileName = uploadedFile.FileName;
+            document.ContentType = uploadedFile.ContentType;
+            document.FileSizeBytes = uploadedFile.Content.Length;
+            document.FileContent = uploadedFile.Content;
+        }
+
+        document.CategoryId = categoryId;
+        _docRepo.Update(document);
         await _docRepo.SaveChangesAsync();
         return true;
     }
 
     public async Task<bool> DeleteDocumentAsync(int id)
     {
-        var doc = await _docRepo.GetByIdAsync(id);
-        if (doc is null) return false;
+        var document = await _docRepo.GetByIdAsync(id);
+        if (document is null)
+            return false;
 
-        _docRepo.Delete(doc);
+        _docRepo.Delete(document);
         await _docRepo.SaveChangesAsync();
         return true;
     }
+
+    private static DocumentResponseDto ToResponse(Document document) =>
+        new(
+            document.Id,
+            document.Title,
+            document.FileName,
+            document.ContentType,
+            document.FileSizeBytes,
+            document.CreatedAt,
+            document.CategoryId,
+            document.Category?.Name,
+            document.HasFile || document.FileContent is { Length: > 0 });
+
+    private static async Task<UploadedDocumentFile> ReadUploadAsync(
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (file.Length <= 0)
+            throw new ArgumentException("The selected file is empty");
+        if (file.Length > MaxDocumentSizeBytes)
+            throw new ArgumentException($"File exceeds the {MaxDocumentSizeBytes}-byte limit");
+
+        var fileName = Path.GetFileName(file.FileName.Replace('\\', '/'));
+        if (string.IsNullOrWhiteSpace(fileName))
+            throw new ArgumentException("The uploaded file must have a name");
+        if (fileName.Length > 255)
+            throw new ArgumentException("File name cannot exceed 255 characters");
+        if (fileName.Any(char.IsControl))
+            throw new ArgumentException("File name contains invalid characters");
+
+        await using var memory = new MemoryStream((int)file.Length);
+        await file.CopyToAsync(memory, cancellationToken);
+        if (memory.Length > MaxDocumentSizeBytes)
+            throw new ArgumentException($"File exceeds the {MaxDocumentSizeBytes}-byte limit");
+
+        var contentType = MediaTypeHeaderValue.TryParse(file.ContentType, out var mediaType)
+            ? mediaType.MediaType ?? "application/octet-stream"
+            : "application/octet-stream";
+
+        return new UploadedDocumentFile(fileName, contentType, memory.ToArray());
+    }
+
+    private sealed record UploadedDocumentFile(string FileName, string ContentType, byte[] Content);
 }

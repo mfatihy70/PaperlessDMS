@@ -1,6 +1,36 @@
 @Paperless.REST_HostAddress = http://localhost:5252
+@documentId = 1
 
-GET {{Paperless.REST_HostAddress}}/weatherforecast/
+### Upload an original document file
+POST {{Paperless.REST_HostAddress}}/api/Documents
+Content-Type: multipart/form-data; boundary=PaperlessBoundary
+
+--PaperlessBoundary
+Content-Disposition: form-data; name="file"; filename="meeting-notes.md"
+Content-Type: text/markdown
+
+# Meeting Notes
+Agenda and decisions.
+--PaperlessBoundary
+--PaperlessBoundary--
+
+### List document metadata
+GET {{Paperless.REST_HostAddress}}/api/Documents
 Accept: application/json
 
-###
+### Download the original file
+GET {{Paperless.REST_HostAddress}}/api/Documents/{{documentId}}/file
+
+### Replace the original file
+PUT {{Paperless.REST_HostAddress}}/api/Documents/{{documentId}}
+Content-Type: multipart/form-data; boundary=PaperlessBoundary
+
+--PaperlessBoundary
+Content-Disposition: form-data; name="file"; filename="updated-notes.md"
+Content-Type: text/markdown
+
+Updated notes.
+--PaperlessBoundary--
+
+### Delete a document
+DELETE {{Paperless.REST_HostAddress}}/api/Documents/{{documentId}}

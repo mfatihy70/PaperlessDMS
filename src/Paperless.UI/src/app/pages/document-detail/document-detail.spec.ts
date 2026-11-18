@@ -25,6 +25,7 @@ describe('DocumentDetail Page', () => {
     createdAt: '2026-01-01',
     categoryId: 1,
     categoryName: 'Legal',
+    hasFile: true,
   };
 
   const mockCats: CategoryItem[] = [{ id: 1, name: 'Legal' }];
@@ -83,12 +84,10 @@ describe('DocumentDetail Page', () => {
     docServiceSpy.updateDocument.mockReturnValue(of(void 0));
     fixture.detectChanges();
 
-    component.handleSave({ title: 'Updated MSA', categoryId: 1 });
+    const replacement = new File(['updated'], 'updated.pdf', { type: 'application/pdf' });
+    component.handleSave({ file: replacement, categoryId: 1 });
 
-    expect(docServiceSpy.updateDocument).toHaveBeenCalledWith(42, {
-      title: 'Updated MSA',
-      categoryId: 1,
-    });
+    expect(docServiceSpy.updateDocument).toHaveBeenCalledWith(42, replacement, 1);
     expect(component.statusMessage()).toContain('Document updated successfully!');
     expect(component.isEditing()).toBe(false);
   });

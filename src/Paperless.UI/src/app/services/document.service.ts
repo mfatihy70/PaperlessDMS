@@ -11,6 +11,7 @@ export interface DocumentItem {
   createdAt: string;
   categoryId?: number | null;
   categoryName?: string;
+  hasFile: boolean;
 }
 
 export interface CategoryItem {
@@ -19,18 +20,7 @@ export interface CategoryItem {
   description?: string;
 }
 
-export interface CreateDocumentDto {
-  title: string;
-  fileName: string;
-  contentType?: string;
-  fileSizeBytes: number;
-  categoryId?: number | null;
-}
-
-export interface UpdateDocumentDto {
-  title: string;
-  categoryId?: number | null;
-}
+export const MAX_DOCUMENT_SIZE_BYTES = 25 * 1024 * 1024;
 
 export interface CreateCategoryDto {
   name: string;
@@ -60,12 +50,22 @@ export class DocumentService {
     return this.http.get<DocumentItem>(`${this.docsUrl}/${id}`);
   }
 
-  createDocument(doc: CreateDocumentDto): Observable<DocumentItem> {
-    return this.http.post<DocumentItem>(this.docsUrl, doc);
+  uploadDocument(file: File, categoryId: number | null): Observable<DocumentItem> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    if (categoryId !== null) {
+      formData.append('categoryId', String(categoryId));
+    }
+    return this.http.post<DocumentItem>(this.docsUrl, formData);
   }
 
-  updateDocument(id: number, doc: UpdateDocumentDto): Observable<void> {
-    return this.http.put<void>(`${this.docsUrl}/${id}`, doc);
+  updateDocument(id: number, file: File | null, categoryId: number | null): Observable<void> {
+    const formData = new FormData();
+    if (file) {
+      formData.append('file', file, file.name);
+    }
+    formData.append('categoryId', categoryId === null ? '' : String(categoryId));
+    return this.http.put<void>(`${this.docsUrl}/${id}`, formData);
   }
 
   deleteDocument(id: number): Observable<void> {

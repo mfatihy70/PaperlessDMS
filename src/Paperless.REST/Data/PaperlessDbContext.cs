@@ -19,6 +19,8 @@ public class PaperlessDbContext : DbContext
             entity.HasKey(d => d.Id);
             entity.Property(d => d.Title).IsRequired().HasMaxLength(255);
             entity.Property(d => d.FileName).IsRequired().HasMaxLength(255);
+            entity.Property(d => d.FileContent).HasColumnType("bytea");
+            entity.Ignore(d => d.HasFile);
             entity.HasOne(d => d.Category)
                   .WithMany(c => c.Documents)
                   .HasForeignKey(d => d.CategoryId)
