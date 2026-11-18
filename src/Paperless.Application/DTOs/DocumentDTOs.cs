@@ -1,4 +1,4 @@
-namespace Paperless.REST.DTOs;
+namespace Paperless.Application.DTOs;
 
 /// <summary>Stored document metadata including its category and file availability.</summary>
 /// <param name="Id">The generated document ID.</param>
@@ -24,13 +24,5 @@ public sealed record DocumentResponseDto(
 /// <summary>A stored original document file returned to the file download endpoint.</summary>
 public sealed record DocumentFileDto(string FileName, string ContentType, byte[] Content);
 
-/// <summary>A new category for organizing documents.</summary>
-/// <param name="Name">The category name, for example Invoices.</param>
-/// <param name="Description">An optional description of the category.</param>
-public record CreateCategoryDto(string Name, string? Description);
-
-/// <summary>A stored document category.</summary>
-/// <param name="Id">The generated category ID.</param>
-/// <param name="Name">The category name.</param>
-/// <param name="Description">The category description, or null if none was provided.</param>
-public record CategoryResponseDto(int Id, string Name, string? Description);
+/// <summary>A framework-independent upload. The caller owns and disposes the content stream.</summary>
+public sealed record DocumentUpload(string FileName, string? ContentType, long Length, Stream Content);

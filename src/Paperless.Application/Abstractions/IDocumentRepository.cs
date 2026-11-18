@@ -1,6 +1,6 @@
-using Paperless.REST.Models;
+using Paperless.Domain.Entities;
 
-namespace Paperless.REST.Repositories;
+namespace Paperless.Application.Abstractions;
 
 public interface IDocumentRepository : IRepository<Document>
 {

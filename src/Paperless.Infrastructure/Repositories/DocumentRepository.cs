@@ -1,8 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using Paperless.REST.Data;
-using Paperless.REST.Models;
+using Paperless.Application.Abstractions;
+using Paperless.Domain.Entities;
+using Paperless.Infrastructure.Persistence;
 
-namespace Paperless.REST.Repositories;
+namespace Paperless.Infrastructure.Repositories;
 
 public class DocumentRepository : Repository<Document>, IDocumentRepository
 {

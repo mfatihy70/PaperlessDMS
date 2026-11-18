@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
 
-namespace Paperless.REST.Repositories;
+namespace Paperless.Application.Abstractions;
 
 public interface IRepository<T> where T : class
 {

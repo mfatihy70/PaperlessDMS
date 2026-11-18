@@ -1,14 +1,18 @@
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
 using Microsoft.OpenApi;
-using Paperless.REST.Data;
-using Paperless.REST.Models;
-using Paperless.REST.Repositories;
-using Paperless.REST.Services;
+using Paperless.Application.Abstractions;
+using Paperless.Application.Services;
+using Paperless.Infrastructure;
+using Paperless.Infrastructure.Persistence;
+using Paperless.REST.ExceptionHandling;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Add Controllers
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+    options.ModelMetadataDetailsProviders.Add(new SystemTextJsonValidationMetadataProvider()));
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ApplicationValidationExceptionHandler>();
 
 // 2. Add Swagger / OpenAPI
 builder.Services.AddEndpointsApiExplorer();
@@ -24,19 +28,26 @@ builder.Services.AddSwaggerGen(options =>
     options.IncludeXmlComments(
         Path.Combine(AppContext.BaseDirectory, "Paperless.REST.xml"),
         includeControllerXmlComments: true);
+    options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, "Paperless.Application.xml"));
 });
 
 // 3. Database Context
 var connString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<PaperlessDbContext>(options =>
-    options.UseNpgsql(connString));
+builder.Services.AddInfrastructure(connString);
 
 // 4. DI Registrations
-builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
-builder.Services.AddScoped<IRepository<DocumentCategory>, Repository<DocumentCategory>>();
 builder.Services.AddScoped<IDocumentService, DocumentService>();
+builder.Services.AddScoped<ICategoryService, CategoryService>();
 
 var app = builder.Build();
+
+app.UseExceptionHandler(new ExceptionHandlerOptions
+{
+    StatusCodeSelector = exception => exception is BadHttpRequestException requestException
+        ? requestException.StatusCode
+        : StatusCodes.Status500InternalServerError
+});
+app.UseStatusCodePages();
 
 // 5. Enable Swagger unconditionally (so it works inside Docker)
 app.UseSwagger();
@@ -55,24 +66,7 @@ app.UseSwaggerUI(c =>
 // 6. Ensure the database and upgrade existing document tables for original file storage.
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<PaperlessDbContext>();
-    if (!db.Database.EnsureCreated())
-    {
-        db.Database.ExecuteSqlRaw(
-            """
-            ALTER TABLE "Documents" ADD COLUMN IF NOT EXISTS "FileContent" bytea NULL;
-            DO $$
-            BEGIN
-                IF EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_name = 'Documents' AND column_name = 'Content'
-                ) THEN
-                    EXECUTE 'UPDATE "Documents" SET "FileContent" = convert_to("Content", ''UTF8'') WHERE "FileContent" IS NULL AND "Content" IS NOT NULL';
-                END IF;
-            END $$;
-            ALTER TABLE "Documents" DROP COLUMN IF EXISTS "Content";
-            """);
-    }
+    scope.ServiceProvider.GetRequiredService<DatabaseInitializer>().Initialize();
 }
 
 app.UseAuthorization();

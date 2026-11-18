@@ -1,20 +1,22 @@
 using System.Net.Http.Headers;
-using Microsoft.AspNetCore.Http;
-using Paperless.REST.DTOs;
-using Paperless.REST.Models;
-using Paperless.REST.Repositories;
+using Paperless.Application.Abstractions;
+using Paperless.Application.DTOs;
+using Paperless.Application.Exceptions;
+using Paperless.Domain.Entities;
 
-namespace Paperless.REST.Services;
+namespace Paperless.Application.Services;
 
 public sealed class DocumentService : IDocumentService
 {
     public const long MaxDocumentSizeBytes = 25 * 1024 * 1024;
 
     private readonly IDocumentRepository _docRepo;
+    private readonly IRepository<DocumentCategory> _categoryRepo;
 
-    public DocumentService(IDocumentRepository docRepo)
+    public DocumentService(IDocumentRepository docRepo, IRepository<DocumentCategory> categoryRepo)
     {
         _docRepo = docRepo;
+        _categoryRepo = categoryRepo;
     }
 
     public async Task<IEnumerable<DocumentResponseDto>> GetAllDocumentsAsync()
@@ -25,15 +27,17 @@ public sealed class DocumentService : IDocumentService
 
     public async Task<DocumentResponseDto?> GetDocumentByIdAsync(int id)
     {
+        ValidateId(id);
         var document = await _docRepo.GetByIdWithCategoryAsync(id);
         return document is null ? null : ToResponse(document);
     }
 
     public async Task<DocumentResponseDto> CreateDocumentAsync(
-        IFormFile file,
+        DocumentUpload file,
         int? categoryId,
         CancellationToken cancellationToken)
     {
+        await ValidateCategoryAsync(categoryId);
         var uploadedFile = await ReadUploadAsync(file, cancellationToken);
         var title = Path.GetFileNameWithoutExtension(uploadedFile.FileName);
         if (string.IsNullOrWhiteSpace(title))
@@ -54,11 +58,12 @@ public sealed class DocumentService : IDocumentService
         await _docRepo.SaveChangesAsync();
 
         var created = await _docRepo.GetByIdWithCategoryAsync(document.Id);
-        return ToResponse(created!);
+        return ToResponse(created ?? throw new InvalidOperationException("The saved document could not be loaded."));
     }
 
     public async Task<DocumentFileDto?> GetDocumentFileAsync(int id)
     {
+        ValidateId(id);
         var document = await _docRepo.GetByIdAsync(id);
         var content = document?.FileContent;
         if (document is null || content is not { Length: > 0 })
@@ -69,14 +74,16 @@ public sealed class DocumentService : IDocumentService
 
     public async Task<bool> UpdateDocumentAsync(
         int id,
-        IFormFile? file,
+        DocumentUpload? file,
         int? categoryId,
         CancellationToken cancellationToken)
     {
+        ValidateId(id);
         var document = await _docRepo.GetByIdAsync(id);
         if (document is null)
             return false;
 
+        await ValidateCategoryAsync(categoryId);
         var uploadedFile = file is null
             ? null
             : await ReadUploadAsync(file, cancellationToken);
@@ -101,6 +108,7 @@ public sealed class DocumentService : IDocumentService
 
     public async Task<bool> DeleteDocumentAsync(int id)
     {
+        ValidateId(id);
         var document = await _docRepo.GetByIdAsync(id);
         if (document is null)
             return false;
@@ -122,27 +130,51 @@ public sealed class DocumentService : IDocumentService
             document.Category?.Name,
             document.HasFile || document.FileContent is { Length: > 0 });
 
+    private async Task ValidateCategoryAsync(int? categoryId)
+    {
+        if (categoryId.HasValue &&
+            (categoryId.Value <= 0 || await _categoryRepo.GetByIdAsync(categoryId.Value) is null))
+        {
+            throw new ApplicationValidationException("categoryId", "Choose an existing category or leave the document unassigned.");
+        }
+    }
+
     private static async Task<UploadedDocumentFile> ReadUploadAsync(
-        IFormFile file,
+        DocumentUpload file,
         CancellationToken cancellationToken)
     {
         if (file.Length <= 0)
-            throw new ArgumentException("The selected file is empty");
+            throw new ApplicationValidationException("file", "The selected file is empty.");
         if (file.Length > MaxDocumentSizeBytes)
-            throw new ArgumentException($"File exceeds the {MaxDocumentSizeBytes}-byte limit");
+            throw new ApplicationValidationException("file", $"File exceeds the {MaxDocumentSizeBytes}-byte limit.");
+
+        if (string.IsNullOrWhiteSpace(file.FileName))
+            throw new ApplicationValidationException("file", "The uploaded file must have a name.");
 
         var fileName = Path.GetFileName(file.FileName.Replace('\\', '/'));
         if (string.IsNullOrWhiteSpace(fileName))
-            throw new ArgumentException("The uploaded file must have a name");
+            throw new ApplicationValidationException("file", "The uploaded file must have a name.");
         if (fileName.Length > 255)
-            throw new ArgumentException("File name cannot exceed 255 characters");
+            throw new ApplicationValidationException("file", "File name cannot exceed 255 characters.");
         if (fileName.Any(char.IsControl))
-            throw new ArgumentException("File name contains invalid characters");
+            throw new ApplicationValidationException("file", "File name contains invalid characters.");
+
+        if (file.Content is null || !file.Content.CanRead)
+            throw new ApplicationValidationException("file", "The uploaded file cannot be read.");
 
         await using var memory = new MemoryStream((int)file.Length);
-        await file.CopyToAsync(memory, cancellationToken);
-        if (memory.Length > MaxDocumentSizeBytes)
-            throw new ArgumentException($"File exceeds the {MaxDocumentSizeBytes}-byte limit");
+        var buffer = new byte[81920];
+        int bytesRead;
+        while ((bytesRead = await file.Content.ReadAsync(buffer, cancellationToken)) > 0)
+        {
+            if (memory.Length + bytesRead > MaxDocumentSizeBytes)
+                throw new ApplicationValidationException("file", $"File exceeds the {MaxDocumentSizeBytes}-byte limit.");
+
+            await memory.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+        }
+
+        if (memory.Length == 0)
+            throw new ApplicationValidationException("file", "The selected file is empty.");
 
         var contentType = MediaTypeHeaderValue.TryParse(file.ContentType, out var mediaType)
             ? mediaType.MediaType ?? "application/octet-stream"
@@ -152,4 +184,10 @@ public sealed class DocumentService : IDocumentService
     }
 
     private sealed record UploadedDocumentFile(string FileName, string ContentType, byte[] Content);
+
+    private static void ValidateId(int id)
+    {
+        if (id <= 0)
+            throw new ApplicationValidationException("id", "The document ID must be a positive integer.");
+    }
 }

@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Paperless.REST.Models;
+using Paperless.Domain.Entities;
 
-namespace Paperless.REST.Data;
+namespace Paperless.Infrastructure.Persistence;
 
 public class PaperlessDbContext : DbContext
 {

@@ -1,9 +1,9 @@
-using Microsoft.AspNetCore.Http;
 using Moq;
-using Paperless.REST.DTOs;
-using Paperless.REST.Models;
-using Paperless.REST.Repositories;
-using Paperless.REST.Services;
+using Paperless.Application.Abstractions;
+using Paperless.Application.DTOs;
+using Paperless.Application.Exceptions;
+using Paperless.Application.Services;
+using Paperless.Domain.Entities;
 using Xunit;
 
 namespace Paperless.REST.Tests;
@@ -11,11 +11,14 @@ namespace Paperless.REST.Tests;
 public class DocumentServiceTests
 {
     private readonly Mock<IDocumentRepository> _documents = new();
+    private readonly Mock<IRepository<DocumentCategory>> _categories = new();
     private readonly DocumentService _service;
 
     public DocumentServiceTests()
     {
-        _service = new DocumentService(_documents.Object);
+        _categories.Setup(x => x.GetByIdAsync(It.IsAny<int>()))
+            .ReturnsAsync((int id) => new DocumentCategory { Id = id, Name = "Category" });
+        _service = new DocumentService(_documents.Object, _categories.Object);
     }
 
     [Fact]
@@ -84,7 +87,7 @@ public class DocumentServiceTests
     {
         var file = CreateFile([], "empty.txt", "text/plain");
 
-        await Assert.ThrowsAsync<ArgumentException>(() =>
+        await Assert.ThrowsAsync<ApplicationValidationException>(() =>
             _service.CreateDocumentAsync(file, null, CancellationToken.None));
 
         _documents.Verify(x => x.AddAsync(It.IsAny<Document>()), Times.Never);
@@ -99,7 +102,7 @@ public class DocumentServiceTests
             "large.pdf",
             "application/pdf");
 
-        await Assert.ThrowsAsync<ArgumentException>(() =>
+        await Assert.ThrowsAsync<ApplicationValidationException>(() =>
             _service.CreateDocumentAsync(file, null, CancellationToken.None));
 
         _documents.Verify(x => x.AddAsync(It.IsAny<Document>()), Times.Never);
@@ -223,13 +226,8 @@ public class DocumentServiceTests
         _documents.Verify(x => x.SaveChangesAsync(), Times.Never);
     }
 
-    private static FormFile CreateFile(byte[] bytes, string fileName, string contentType)
+    private static DocumentUpload CreateFile(byte[] bytes, string fileName, string contentType)
     {
-        var stream = new MemoryStream(bytes);
-        return new FormFile(stream, 0, bytes.Length, "file", fileName)
-        {
-            Headers = new HeaderDictionary(),
-            ContentType = contentType
-        };
+        return new DocumentUpload(fileName, contentType, bytes.Length, new MemoryStream(bytes));
     }
 }

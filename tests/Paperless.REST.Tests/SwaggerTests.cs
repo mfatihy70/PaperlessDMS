@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Moq;
-using Paperless.REST.Data;
+using Paperless.Infrastructure.Persistence;
 
 namespace Paperless.REST.Tests;
 
@@ -35,7 +35,8 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
             "get /api/Documents", "get /api/Documents/{id}", "post /api/Documents",
             "get /api/Documents/{id}/file",
             "put /api/Documents/{id}", "delete /api/Documents/{id}",
-            "get /api/Categories", "post /api/Categories"
+            "get /api/Categories", "post /api/Categories",
+            "get /api/Categories/{id}", "put /api/Categories/{id}", "delete /api/Categories/{id}"
         ];
         Assert.Equal(expected.Order(), operations.Select(operation => operation.Key).Order());
         Assert.All(operations, operation =>
@@ -46,11 +47,11 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
 
     [Theory]
     [InlineData("/api/Documents", "get", "200")]
-    [InlineData("/api/Documents/{id}", "get", "200,404")]
+    [InlineData("/api/Documents/{id}", "get", "200,400,404")]
     [InlineData("/api/Documents", "post", "201,400,413")]
-    [InlineData("/api/Documents/{id}/file", "get", "200,404")]
+    [InlineData("/api/Documents/{id}/file", "get", "200,400,404")]
     [InlineData("/api/Documents/{id}", "put", "204,400,404,413")]
-    [InlineData("/api/Documents/{id}", "delete", "204,404")]
+    [InlineData("/api/Documents/{id}", "delete", "204,400,404")]
     [InlineData("/api/Categories", "get", "200")]
     [InlineData("/api/Categories", "post", "201,400")]
     public async Task OpenApi_DescribesActualResponseCodes(string path, string method, string expectedCodes)

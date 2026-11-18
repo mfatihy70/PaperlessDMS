@@ -1,4 +1,4 @@
-namespace Paperless.REST.Models;
+namespace Paperless.Domain.Entities;
 
 public class DocumentCategory
 {
