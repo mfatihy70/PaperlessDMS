@@ -63,10 +63,10 @@ app.UseSwaggerUI(c =>
 // IMPORTANT: DO NOT call app.UseHttpsRedirection() here!
 // Containers run plain HTTP on internal networks.
 
-// 6. Ensure the database and upgrade existing document tables for original file storage.
+// 6. Apply versioned migrations before accepting requests.
 using (var scope = app.Services.CreateScope())
 {
-    scope.ServiceProvider.GetRequiredService<DatabaseInitializer>().Initialize();
+    await scope.ServiceProvider.GetRequiredService<IDatabaseInitializer>().InitializeAsync();
 }
 
 app.UseAuthorization();
