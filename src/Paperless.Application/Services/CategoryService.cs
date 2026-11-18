@@ -1,6 +1,7 @@
 using Paperless.Application.Abstractions;
 using Paperless.Application.DTOs;
 using Paperless.Application.Exceptions;
+using Paperless.Application.Mapping;
 using Paperless.Domain.Entities;
 
 namespace Paperless.Application.Services;
@@ -10,14 +11,14 @@ public sealed class CategoryService(IRepository<DocumentCategory> repository) : 
     public async Task<IEnumerable<CategoryResponseDto>> GetAllAsync()
     {
         var categories = await repository.GetAllAsync();
-        return categories.Select(ToResponse);
+        return categories.Select(ResponseMapper.ToResponse);
     }
 
     public async Task<CategoryResponseDto?> GetByIdAsync(int id)
     {
         ValidateId(id);
         var category = await repository.GetByIdAsync(id);
-        return category is null ? null : ToResponse(category);
+        return category is null ? null : ResponseMapper.ToResponse(category);
     }
 
     public async Task<CategoryResponseDto> CreateAsync(string name, string? description)
@@ -26,7 +27,7 @@ public sealed class CategoryService(IRepository<DocumentCategory> repository) : 
         var category = new DocumentCategory { Name = name.Trim(), Description = description };
         await repository.AddAsync(category);
         await repository.SaveChangesAsync();
-        return ToResponse(category);
+        return ResponseMapper.ToResponse(category);
     }
 
     public async Task<bool> UpdateAsync(int id, string name, string? description)
@@ -55,9 +56,6 @@ public sealed class CategoryService(IRepository<DocumentCategory> repository) : 
         await repository.SaveChangesAsync();
         return true;
     }
-
-    private static CategoryResponseDto ToResponse(DocumentCategory category) =>
-        new(category.Id, category.Name, category.Description);
 
     private static void ValidateName(string name)
     {
