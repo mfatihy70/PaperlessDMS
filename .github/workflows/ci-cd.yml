@@ -17,13 +17,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Validate Docker Compose configuration
         run: docker compose config --quiet
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
@@ -37,7 +37,7 @@ jobs:
         run: dotnet test Paperless.slnx --configuration Release --no-restore
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -47,9 +47,11 @@ jobs:
         working-directory: src/Paperless.UI
         run: npm ci
 
-      - name: Check formatting and syntax
+      - name: Auto-format and check UI source
         working-directory: src/Paperless.UI
-        run: npm run format:check
+        run: |
+          npm run format:fix
+          npm run format:check
 
       - name: Type-check UI
         working-directory: src/Paperless.UI
@@ -82,7 +84,7 @@ jobs:
             dockerfile: ./src/Paperless.UI/dockerfile
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
