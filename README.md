@@ -49,9 +49,10 @@ Response DTO XML documentation is generated in Application and loaded alongside 
 
 - File bytes remain in PostgreSQL for this refactor. API routes, multipart fields and JSON response properties are preserved.
   A future storage adapter can move bytes to MinIO without introducing MinIO dependencies into Application.
-- The existing `EnsureCreated` and legacy `FileContent` upgrade SQL now belong to
-  `Paperless.Infrastructure/Persistence/DatabaseInitializer.cs`. Their behavior is unchanged; versioned EF migrations
-  are a separate follow-up. This refactor does not recreate or reset databases.
+- `DatabaseInitializer` applies versioned EF Core migrations before the API accepts requests.
+  The initial migration creates a fresh schema or adopts a verified pre-migration schema in `public`.
+  It preserves existing rows and original bytes; unsupported schema differences stop startup.
+  See [database migrations](docs/database-migrations.md) for backup, upgrade, verification and tooling instructions.
 - Mapping stays explicit inside application services. No new mapping library is introduced as part of the architecture change.
 - Existing tests are adapted to the new namespaces and stream-based application boundary. This refactor does not add
   OCR, queues, GenAI or new frontend behavior.
@@ -64,6 +65,25 @@ Build from the repository root:
 dotnet build Paperless.slnx
 docker build -f src/Paperless.REST/dockerfile -t paperless-rest:local .
 ```
+
+### Database migrations
+
+Migration files and the model snapshot live in `Paperless.Infrastructure/Persistence/Migrations`.
+The API applies pending migrations at startup; the EF CLI can also apply them explicitly.
+Back up an existing database before the first upgrade, following
+[the migration guide](docs/database-migrations.md).
+
+The repository pins `dotnet-ef` in `.config/dotnet-tools.json`. From the repository root:
+
+```powershell
+dotnet tool restore
+$env:ConnectionStrings__DefaultConnection = "Host=localhost;Port=5432;Database=paperless_db;Username=paperless_user;Password=paperless_password"
+dotnet ef migrations list --project src/Paperless.Infrastructure
+```
+
+The design-time factory creates the context without starting the REST application.
+Schema inspection and migration generation do not apply migrations. The initial baseline
+deliberately blocks rollback to `0`, because it may have adopted pre-existing data.
 
 ## API documentation (Swagger UI)
 

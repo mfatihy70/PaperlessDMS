@@ -13,6 +13,7 @@ public class PaperlessDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.HasDefaultSchema("public");
 
         modelBuilder.Entity<Document>(entity =>
         {

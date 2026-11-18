@@ -11,10 +11,11 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, string? connectionString)
     {
-        services.AddDbContext<PaperlessDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddDbContext<PaperlessDbContext>(options => options.UseNpgsql(connectionString, postgres =>
+            postgres.MigrationsHistoryTable("__EFMigrationsHistory", "public")));
         services.AddScoped<IDocumentRepository, DocumentRepository>();
         services.AddScoped<IRepository<DocumentCategory>, Repository<DocumentCategory>>();
-        services.AddScoped<DatabaseInitializer>();
+        services.AddScoped<IDatabaseInitializer, DatabaseInitializer>();
         return services;
     }
 }
