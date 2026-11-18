@@ -11,7 +11,7 @@ describe('Dashboard Page', () => {
   let docServiceSpy: ReturnType<typeof vi.fn> & {
     getDocuments: ReturnType<typeof vi.fn>;
     getCategories: ReturnType<typeof vi.fn>;
-    createDocument: ReturnType<typeof vi.fn>;
+    uploadDocument: ReturnType<typeof vi.fn>;
     createCategory: ReturnType<typeof vi.fn>;
     updateCategory: ReturnType<typeof vi.fn>;
     deleteCategory: ReturnType<typeof vi.fn>;
@@ -27,6 +27,7 @@ describe('Dashboard Page', () => {
       fileSizeBytes: 1024,
       createdAt: '2026-01-01',
       categoryId: 1,
+      hasFile: true,
     },
     {
       id: 2,
@@ -36,6 +37,7 @@ describe('Dashboard Page', () => {
       fileSizeBytes: 2048,
       createdAt: '2026-01-01',
       categoryId: 2,
+      hasFile: true,
     },
   ];
 
@@ -48,7 +50,7 @@ describe('Dashboard Page', () => {
     docServiceSpy = {
       getDocuments: vi.fn().mockReturnValue(of(mockDocs)),
       getCategories: vi.fn().mockReturnValue(of(mockCats)),
-      createDocument: vi.fn(),
+      uploadDocument: vi.fn(),
       createCategory: vi.fn(),
       updateCategory: vi.fn(),
       deleteCategory: vi.fn(),
@@ -56,7 +58,7 @@ describe('Dashboard Page', () => {
     } as unknown as ReturnType<typeof vi.fn> & {
       getDocuments: ReturnType<typeof vi.fn>;
       getCategories: ReturnType<typeof vi.fn>;
-      createDocument: ReturnType<typeof vi.fn>;
+      uploadDocument: ReturnType<typeof vi.fn>;
       createCategory: ReturnType<typeof vi.fn>;
       updateCategory: ReturnType<typeof vi.fn>;
       deleteCategory: ReturnType<typeof vi.fn>;
@@ -99,17 +101,16 @@ describe('Dashboard Page', () => {
   });
 
   it('should handle document upload delegation', () => {
-    docServiceSpy.createDocument.mockReturnValue(of(mockDocs[0]));
+    const file = new File(['bytes'], 'new.pdf', { type: 'application/pdf' });
+    docServiceSpy.uploadDocument.mockReturnValue(of(mockDocs[0]));
     fixture.detectChanges();
 
     component.handleUpload({
-      title: 'New',
-      fileName: 'new.pdf',
-      fileSizeBytes: 500,
+      file,
       categoryId: null,
     });
 
-    expect(docServiceSpy.createDocument).toHaveBeenCalled();
+    expect(docServiceSpy.uploadDocument).toHaveBeenCalledWith(file, null);
     expect(component.successMessage()).toContain('Document uploaded successfully!');
   });
 

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Paperless.REST.Controllers;
@@ -20,7 +21,7 @@ public class DocumentsControllerTests
     }
 
     private static DocumentResponseDto Sample(int id = 1) =>
-        new(id, "Invoice", "invoice.pdf", "application/pdf", 100, Date, null, null);
+        new(id, "Invoice", "invoice.pdf", "application/pdf", 100, Date, null, null, true);
 
     [Fact]
     public async Task GetAll_ReturnsOkWithDocuments()
@@ -52,30 +53,51 @@ public class DocumentsControllerTests
     [Fact]
     public async Task Create_ReturnsCreatedAtAction()
     {
-        var input = new CreateDocumentDto("Invoice", "invoice.pdf", null, 100, null);
-        _service.Setup(x => x.CreateDocumentAsync(input)).ReturnsAsync(Sample(25));
-        var action = await _controller.Create(input);
+        var file = CreateFile();
+        _service.Setup(x => x.CreateDocumentAsync(file, 5, CancellationToken.None)).ReturnsAsync(Sample(25));
+        var action = await _controller.Create(file, 5, CancellationToken.None);
         var created = Assert.IsType<CreatedAtActionResult>(action.Result);
         Assert.Equal(nameof(DocumentsController.GetById), created.ActionName);
         Assert.Equal(25, created.RouteValues!["id"]);
         Assert.Equal(25, Assert.IsType<DocumentResponseDto>(created.Value).Id);
-        _service.Verify(x => x.CreateDocumentAsync(input), Times.Once);
+        _service.Verify(x => x.CreateDocumentAsync(file, 5, CancellationToken.None), Times.Once);
+    }
+
+    [Fact]
+    public async Task Create_WithoutFile_ReturnsBadRequest()
+    {
+        var result = await _controller.Create(null, null, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        _service.Verify(x => x.CreateDocumentAsync(
+            It.IsAny<IFormFile>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetFile_ReturnsOriginalFile()
+    {
+        var bytes = new byte[] { 1, 2, 3 };
+        _service.Setup(x => x.GetDocumentFileAsync(1))
+            .ReturnsAsync(new DocumentFileDto("invoice.pdf", "application/pdf", bytes));
+
+        var result = Assert.IsType<FileContentResult>(await _controller.GetFile(1));
+
+        Assert.Equal(bytes, result.FileContents);
+        Assert.Equal("invoice.pdf", result.FileDownloadName);
     }
 
     [Fact]
     public async Task Update_Existing_ReturnsNoContent()
     {
-        var input = new UpdateDocumentDto("New title", null);
-        _service.Setup(x => x.UpdateDocumentAsync(1, input)).ReturnsAsync(true);
-        Assert.IsType<NoContentResult>(await _controller.Update(1, input));
+        _service.Setup(x => x.UpdateDocumentAsync(1, null, 5, CancellationToken.None)).ReturnsAsync(true);
+        Assert.IsType<NoContentResult>(await _controller.Update(1, null, 5, CancellationToken.None));
     }
 
     [Fact]
     public async Task Update_Missing_ReturnsNotFound()
     {
-        var input = new UpdateDocumentDto("New title", null);
-        _service.Setup(x => x.UpdateDocumentAsync(404, input)).ReturnsAsync(false);
-        Assert.IsType<NotFoundResult>(await _controller.Update(404, input));
+        _service.Setup(x => x.UpdateDocumentAsync(404, null, null, CancellationToken.None)).ReturnsAsync(false);
+        Assert.IsType<NotFoundResult>(await _controller.Update(404, null, null, CancellationToken.None));
     }
 
     [Fact]
@@ -90,5 +112,15 @@ public class DocumentsControllerTests
     {
         _service.Setup(x => x.DeleteDocumentAsync(404)).ReturnsAsync(false);
         Assert.IsType<NotFoundResult>(await _controller.Delete(404));
+    }
+
+    private static FormFile CreateFile()
+    {
+        var stream = new MemoryStream([1, 2, 3]);
+        return new FormFile(stream, 0, stream.Length, "file", "invoice.pdf")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "application/pdf"
+        };
     }
 }

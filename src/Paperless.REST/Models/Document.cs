@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace Paperless.REST.Models;
 
 public class Document
@@ -8,6 +10,12 @@ public class Document
     public string ContentType { get; set; } = "application/pdf";
     public long FileSizeBytes { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Original uploaded file bytes. Null for legacy records without an upload.</summary>
+    public byte[]? FileContent { get; set; }
+
+    [NotMapped]
+    public bool HasFile { get; set; }
 
     // Foreign Key to Additional Entity
     public int? CategoryId { get; set; }

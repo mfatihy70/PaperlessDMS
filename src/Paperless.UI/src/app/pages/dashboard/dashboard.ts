@@ -4,11 +4,10 @@ import {
   DocumentService,
   DocumentItem,
   CategoryItem,
-  CreateDocumentDto,
   CreateCategoryDto,
   UpdateCategoryDto,
 } from '../../services/document.service';
-import { DocumentForm } from '../../components/document-form/document-form';
+import { DocumentForm, DocumentFormValue } from '../../components/document-form/document-form';
 import { CategoryForm } from '../../components/category-form/category-form';
 import { DocumentTable } from '../../components/document-table/document-table';
 
@@ -87,9 +86,9 @@ export class Dashboard implements OnInit {
     this.applyFilter();
   }
 
-  handleUpload(dto: CreateDocumentDto): void {
+  handleUpload(formValue: DocumentFormValue): void {
     this.isSavingDoc.set(true);
-    this.api.createDocument(dto).subscribe({
+    this.api.uploadDocument(formValue.file, formValue.categoryId).subscribe({
       next: () => {
         this.showSuccess('Document uploaded successfully!');
         this.docFormRef()?.reset();

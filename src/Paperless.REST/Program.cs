@@ -18,7 +18,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "Paperless REST API",
         Version = "v1",
-        Description = "Manage document metadata and categories. Document file upload, OCR, " +
+        Description = "Manage uploaded documents and categories. OCR, " +
                       "AI summaries and full-text search are not implemented yet."
     });
     options.IncludeXmlComments(
@@ -52,11 +52,27 @@ app.UseSwaggerUI(c =>
 // IMPORTANT: DO NOT call app.UseHttpsRedirection() here!
 // Containers run plain HTTP on internal networks.
 
-// 6. DB Migration / EnsureCreated
+// 6. Ensure the database and upgrade existing document tables for original file storage.
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<PaperlessDbContext>();
-    db.Database.EnsureCreated();
+    if (!db.Database.EnsureCreated())
+    {
+        db.Database.ExecuteSqlRaw(
+            """
+            ALTER TABLE "Documents" ADD COLUMN IF NOT EXISTS "FileContent" bytea NULL;
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'Documents' AND column_name = 'Content'
+                ) THEN
+                    EXECUTE 'UPDATE "Documents" SET "FileContent" = convert_to("Content", ''UTF8'') WHERE "FileContent" IS NULL AND "Content" IS NOT NULL';
+                END IF;
+            END $$;
+            ALTER TABLE "Documents" DROP COLUMN IF EXISTS "Content";
+            """);
+    }
 }
 
 app.UseAuthorization();

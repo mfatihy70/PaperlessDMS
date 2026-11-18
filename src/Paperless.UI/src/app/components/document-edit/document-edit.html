@@ -1,10 +1,22 @@
 <div class="mb-4 bg-light p-3 rounded">
   <form [formGroup]="form" (ngSubmit)="onSubmit()">
     <div class="mb-3">
-      <label class="form-label small fw-semibold">Document Title *</label>
-      <input type="text" formControlName="title" class="form-control" />
-      @if (form.get('title')?.touched && form.get('title')?.invalid) {
-        <div class="text-danger small mt-1">Title must be between 3 and 100 characters.</div>
+      <label class="form-label small fw-semibold">Replace file (optional)</label>
+      @if (!selectedFile()) {
+        <input type="file" accept="*/*" class="form-control" (change)="onFileSelected($event)" />
+        <div class="form-text">Current file: {{ document().fileName }}</div>
+      } @else {
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge text-bg-success">
+            {{ selectedFile()!.name }} ({{ selectedFile()!.size / 1024 | number: '1.1-1' }} KB)
+          </span>
+          <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeFile()">
+            Remove
+          </button>
+        </div>
+      }
+      @if (fileError()) {
+        <div class="text-danger small mt-1">{{ fileError() }}</div>
       }
     </div>
 
@@ -19,7 +31,7 @@
     </div>
 
     <div class="d-flex gap-2">
-      <button type="submit" class="btn btn-primary btn-sm" [disabled]="form.invalid || isSaving()">
+      <button type="submit" class="btn btn-primary btn-sm" [disabled]="isSaving()">
         @if (isSaving()) {
           <span class="spinner-border spinner-border-sm me-1" role="status"></span>
         }

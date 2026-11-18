@@ -1,14 +1,9 @@
 import { Component, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { forkJoin } from 'rxjs';
-import {
-  DocumentService,
-  DocumentItem,
-  CategoryItem,
-  UpdateDocumentDto,
-} from '../../services/document.service';
+import { DocumentService, DocumentItem, CategoryItem } from '../../services/document.service';
 import { DocumentView } from '../../components/document-view/document-view';
-import { DocumentEdit } from '../../components/document-edit/document-edit';
+import { DocumentEdit, DocumentEditValue } from '../../components/document-edit/document-edit';
 
 @Component({
   selector: 'app-document-detail',
@@ -73,9 +68,9 @@ export class DocumentDetail implements OnInit {
     this.isEditing.update((val) => !val);
   }
 
-  handleSave(dto: UpdateDocumentDto): void {
+  handleSave(value: DocumentEditValue): void {
     this.isSaving.set(true);
-    this.api.updateDocument(this.documentId(), dto).subscribe({
+    this.api.updateDocument(this.documentId(), value.file, value.categoryId).subscribe({
       next: () => {
         this.statusMessage.set('Document updated successfully!');
         this.isEditing.set(false);

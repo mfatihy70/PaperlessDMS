@@ -32,4 +32,18 @@
       </span>
     </div>
   </div>
+  <div class="col-sm-6 col-md-4">
+    <div class="text-muted small text-uppercase fw-semibold">Original File</div>
+    @if (document().hasFile) {
+      <a
+        class="btn btn-sm btn-outline-primary mt-1"
+        [href]="'/api/documents/' + document().id + '/file'"
+        [attr.download]="document().fileName"
+      >
+        Download {{ document().fileName }}
+      </a>
+    } @else {
+      <div class="text-muted mt-1">No stored file</div>
+    }
+  </div>
 </div>
