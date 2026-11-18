@@ -9,4 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="../Paperless.Domain/Paperless.Domain.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Riok.Mapperly" Version="4.3.1" ExcludeAssets="runtime" PrivateAssets="all" />
+  </ItemGroup>
 </Project>

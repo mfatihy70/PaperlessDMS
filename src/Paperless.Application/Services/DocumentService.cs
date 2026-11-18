@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using Paperless.Application.Abstractions;
 using Paperless.Application.DTOs;
 using Paperless.Application.Exceptions;
+using Paperless.Application.Mapping;
 using Paperless.Domain.Entities;
 
 namespace Paperless.Application.Services;
@@ -22,14 +23,14 @@ public sealed class DocumentService : IDocumentService
     public async Task<IEnumerable<DocumentResponseDto>> GetAllDocumentsAsync()
     {
         var documents = await _docRepo.GetAllWithCategoriesAsync();
-        return documents.Select(ToResponse);
+        return documents.Select(ResponseMapper.ToResponse);
     }
 
     public async Task<DocumentResponseDto?> GetDocumentByIdAsync(int id)
     {
         ValidateId(id);
         var document = await _docRepo.GetByIdWithCategoryAsync(id);
-        return document is null ? null : ToResponse(document);
+        return document is null ? null : ResponseMapper.ToResponse(document);
     }
 
     public async Task<DocumentResponseDto> CreateDocumentAsync(
@@ -58,7 +59,7 @@ public sealed class DocumentService : IDocumentService
         await _docRepo.SaveChangesAsync();
 
         var created = await _docRepo.GetByIdWithCategoryAsync(document.Id);
-        return ToResponse(created ?? throw new InvalidOperationException("The saved document could not be loaded."));
+        return ResponseMapper.ToResponse(created ?? throw new InvalidOperationException("The saved document could not be loaded."));
     }
 
     public async Task<DocumentFileDto?> GetDocumentFileAsync(int id)
@@ -69,7 +70,7 @@ public sealed class DocumentService : IDocumentService
         if (document is null || content is not { Length: > 0 })
             return null;
 
-        return new DocumentFileDto(document.FileName, document.ContentType, content);
+        return ResponseMapper.ToFile(document);
     }
 
     public async Task<bool> UpdateDocumentAsync(
@@ -117,18 +118,6 @@ public sealed class DocumentService : IDocumentService
         await _docRepo.SaveChangesAsync();
         return true;
     }
-
-    private static DocumentResponseDto ToResponse(Document document) =>
-        new(
-            document.Id,
-            document.Title,
-            document.FileName,
-            document.ContentType,
-            document.FileSizeBytes,
-            document.CreatedAt,
-            document.CategoryId,
-            document.Category?.Name,
-            document.HasFile || document.FileContent is { Length: > 0 });
 
     private async Task ValidateCategoryAsync(int? categoryId)
     {
