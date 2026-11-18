@@ -77,7 +77,7 @@ jobs:
       matrix:
         include:
           - service: rest
-            context: ./src/Paperless.REST
+            context: .
             dockerfile: ./src/Paperless.REST/dockerfile
           - service: ui
             context: ./src/Paperless.UI

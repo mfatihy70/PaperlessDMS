@@ -1,8 +1,9 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
-using Paperless.REST.Data;
+using Paperless.Application.Abstractions;
+using Paperless.Infrastructure.Persistence;
 
-namespace Paperless.REST.Repositories;
+namespace Paperless.Infrastructure.Repositories;
 
 public class Repository<T> : IRepository<T> where T : class
 {

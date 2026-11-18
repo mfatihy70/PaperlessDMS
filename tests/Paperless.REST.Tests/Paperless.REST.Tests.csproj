@@ -21,6 +21,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/Paperless.Application/Paperless.Application.csproj" />
+    <ProjectReference Include="../../src/Paperless.Domain/Paperless.Domain.csproj" />
+    <ProjectReference Include="../../src/Paperless.Infrastructure/Paperless.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Paperless.REST\Paperless.REST.csproj" />
   </ItemGroup>
 

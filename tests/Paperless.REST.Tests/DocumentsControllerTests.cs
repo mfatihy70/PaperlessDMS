@@ -2,9 +2,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Paperless.Application.Abstractions;
+using Paperless.Application.DTOs;
 using Paperless.REST.Controllers;
-using Paperless.REST.DTOs;
-using Paperless.REST.Services;
 using Xunit;
 
 namespace Paperless.REST.Tests;
@@ -54,13 +54,17 @@ public class DocumentsControllerTests
     public async Task Create_ReturnsCreatedAtAction()
     {
         var file = CreateFile();
-        _service.Setup(x => x.CreateDocumentAsync(file, 5, CancellationToken.None)).ReturnsAsync(Sample(25));
+        _service.Setup(x => x.CreateDocumentAsync(
+            It.Is<DocumentUpload>(upload => upload.FileName == file.FileName && upload.Length == file.Length),
+            5, CancellationToken.None)).ReturnsAsync(Sample(25));
         var action = await _controller.Create(file, 5, CancellationToken.None);
         var created = Assert.IsType<CreatedAtActionResult>(action.Result);
         Assert.Equal(nameof(DocumentsController.GetById), created.ActionName);
         Assert.Equal(25, created.RouteValues!["id"]);
         Assert.Equal(25, Assert.IsType<DocumentResponseDto>(created.Value).Id);
-        _service.Verify(x => x.CreateDocumentAsync(file, 5, CancellationToken.None), Times.Once);
+        _service.Verify(x => x.CreateDocumentAsync(
+            It.Is<DocumentUpload>(upload => upload.FileName == file.FileName && upload.Length == file.Length),
+            5, CancellationToken.None), Times.Once);
     }
 
     [Fact]
@@ -68,9 +72,11 @@ public class DocumentsControllerTests
     {
         var result = await _controller.Create(null, null, CancellationToken.None);
 
-        Assert.IsType<BadRequestObjectResult>(result.Result);
+        var invalid = Assert.IsAssignableFrom<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, invalid.StatusCode);
+        Assert.Contains("file", Assert.IsType<ValidationProblemDetails>(invalid.Value).Errors.Keys);
         _service.Verify(x => x.CreateDocumentAsync(
-            It.IsAny<IFormFile>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<DocumentUpload>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

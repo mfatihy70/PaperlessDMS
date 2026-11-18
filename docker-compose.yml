@@ -31,8 +31,8 @@ services:
 
   paperless-rest:
     build:
-      context: ./src/Paperless.REST
-      dockerfile: dockerfile
+      context: .
+      dockerfile: src/Paperless.REST/dockerfile
     container_name: paperless-rest
     restart: always
     environment:

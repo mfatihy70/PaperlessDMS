@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Paperless.Application.Abstractions;
+using Paperless.Application.DTOs;
+using Paperless.Application.Services;
+using Paperless.Domain.Entities;
 using Paperless.REST.Controllers;
 using Paperless.REST.DTOs;
-using Paperless.REST.Models;
-using Paperless.REST.Repositories;
 using Xunit;
 
 namespace Paperless.REST.Tests;
@@ -15,7 +17,7 @@ public class CategoriesControllerTests
 
     public CategoriesControllerTests()
     {
-        _controller = new CategoriesController(_repository.Object);
+        _controller = new CategoriesController(new CategoryService(_repository.Object));
     }
 
     [Fact]
@@ -60,7 +62,7 @@ public class CategoriesControllerTests
         var result = await _controller.Create(input);
 
         var created = Assert.IsType<CreatedAtActionResult>(result.Result);
-        Assert.Equal(nameof(CategoriesController.GetAll), created.ActionName);
+        Assert.Equal(nameof(CategoriesController.GetById), created.ActionName);
         Assert.Equal(15, created.RouteValues!["id"]);
         var response = Assert.IsType<CategoryResponseDto>(created.Value);
         Assert.Equal(15, response.Id);

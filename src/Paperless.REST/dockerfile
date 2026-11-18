@@ -2,11 +2,17 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /app
 
-COPY Paperless.REST.csproj .
-RUN dotnet restore
+COPY src/Paperless.Domain/Paperless.Domain.csproj src/Paperless.Domain/
+COPY src/Paperless.Application/Paperless.Application.csproj src/Paperless.Application/
+COPY src/Paperless.Infrastructure/Paperless.Infrastructure.csproj src/Paperless.Infrastructure/
+COPY src/Paperless.REST/Paperless.REST.csproj src/Paperless.REST/
+RUN dotnet restore src/Paperless.REST/Paperless.REST.csproj
 
-COPY . .
-RUN dotnet publish -c Release -o /app/publish
+COPY src/Paperless.Domain/ src/Paperless.Domain/
+COPY src/Paperless.Application/ src/Paperless.Application/
+COPY src/Paperless.Infrastructure/ src/Paperless.Infrastructure/
+COPY src/Paperless.REST/ src/Paperless.REST/
+RUN dotnet publish src/Paperless.REST/Paperless.REST.csproj --no-restore -c Release -o /app/publish
 
 # Runtime Stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

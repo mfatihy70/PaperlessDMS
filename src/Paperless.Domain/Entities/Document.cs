@@ -1,6 +1,4 @@
-using System.ComponentModel.DataAnnotations.Schema;
-
-namespace Paperless.REST.Models;
+namespace Paperless.Domain.Entities;
 
 public class Document
 {
@@ -14,7 +12,6 @@ public class Document
     /// <summary>Original uploaded file bytes. Null for legacy records without an upload.</summary>
     public byte[]? FileContent { get; set; }
 
-    [NotMapped]
     public bool HasFile { get; set; }
 
     // Foreign Key to Additional Entity
