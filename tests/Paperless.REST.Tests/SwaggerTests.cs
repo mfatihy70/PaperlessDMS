@@ -3,8 +3,6 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Moq;
@@ -120,15 +118,11 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
             builder.ConfigureServices(services =>
             {
                 // Only bypass database initialization. Exercise the real Program, controllers and Swagger middleware.
-                services.RemoveAll<PaperlessDbContext>();
-                services.AddScoped(_ =>
-                {
-                    var context = new Mock<PaperlessDbContext>(new DbContextOptions<PaperlessDbContext>());
-                    var database = new Mock<DatabaseFacade>(context.Object);
-                    database.Setup(db => db.EnsureCreated()).Returns(true);
-                    context.SetupGet(db => db.Database).Returns(database.Object);
-                    return context.Object;
-                });
+                var initializer = new Mock<IDatabaseInitializer>();
+                initializer.Setup(db => db.InitializeAsync(It.IsAny<CancellationToken>()))
+                    .Returns(Task.CompletedTask);
+                services.RemoveAll<IDatabaseInitializer>();
+                services.AddScoped(_ => initializer.Object);
             });
         }
     }
