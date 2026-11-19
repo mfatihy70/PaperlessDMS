@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Moq;
 using Paperless.Infrastructure.Persistence;
+using Paperless.Infrastructure.Processing;
 using Paperless.Infrastructure.Storage;
 
 namespace Paperless.REST.Tests;
@@ -33,6 +34,7 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
         [
             "get /api/Documents", "get /api/Documents/{id}", "post /api/Documents",
             "get /api/Documents/{id}/file",
+            "get /api/Documents/{id}/processing", "post /api/Documents/{id}/processing/retry",
             "put /api/Documents/{id}", "delete /api/Documents/{id}",
             "get /api/Categories", "post /api/Categories",
             "get /api/Categories/{id}", "put /api/Categories/{id}", "delete /api/Categories/{id}"
@@ -49,6 +51,8 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
     [InlineData("/api/Documents/{id}", "get", "200,400,404")]
     [InlineData("/api/Documents", "post", "201,400,409,413,502,503")]
     [InlineData("/api/Documents/{id}/file", "get", "200,400,404,502,503")]
+    [InlineData("/api/Documents/{id}/processing", "get", "200,400,404")]
+    [InlineData("/api/Documents/{id}/processing/retry", "post", "202,400,404,409")]
     [InlineData("/api/Documents/{id}", "put", "204,400,404,409,413,502,503")]
     [InlineData("/api/Documents/{id}", "delete", "204,400,404,409")]
     [InlineData("/api/Categories", "get", "200")]
@@ -67,6 +71,7 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
     [InlineData("DocumentResponseDto")]
     [InlineData("CreateCategoryDto")]
     [InlineData("CategoryResponseDto")]
+    [InlineData("ProcessingStatusDto")]
     public async Task OpenApi_DescribesEveryDtoField(string schemaName)
     {
         using var document = JsonDocument.Parse(await _client.GetStringAsync("/swagger/v1/swagger.json"));
@@ -119,6 +124,7 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
             builder.ConfigureServices(services =>
             {
                 services.Configure<MinioStorageOptions>(options => options.CleanupEnabled = false);
+                services.Configure<ProcessingOptions>(options => options.DispatchEnabled = false);
                 // Only bypass database initialization. Exercise the real Program, controllers and Swagger middleware.
                 var initializer = new Mock<IDatabaseInitializer>();
                 initializer.Setup(db => db.InitializeAsync(It.IsAny<CancellationToken>()))

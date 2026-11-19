@@ -31,7 +31,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "Paperless REST API",
         Version = "v1",
-        Description = "Manage uploaded documents and categories. OCR, " +
+        Description = "Manage uploaded documents, categories and asynchronous original preparation. OCR, " +
                       "AI summaries and full-text search are not implemented yet."
     });
     options.IncludeXmlComments(
@@ -43,10 +43,12 @@ builder.Services.AddSwaggerGen(options =>
 // 3. Database Context
 var connString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddInfrastructure(connString, builder.Configuration);
+builder.Services.AddDocumentProcessing(builder.Configuration, dispatchOutbox: true);
 
 // 4. DI Registrations
 builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
+builder.Services.AddScoped<IDocumentProcessingService, DocumentProcessingService>();
 
 var app = builder.Build();
 

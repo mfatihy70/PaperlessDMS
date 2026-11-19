@@ -4,6 +4,7 @@ using Paperless.Application.Abstractions;
 using Paperless.Application.Exceptions;
 using Paperless.Domain.Entities;
 using Paperless.Infrastructure.Persistence;
+using Paperless.Infrastructure.Processing;
 using Paperless.Infrastructure.Storage;
 
 namespace Paperless.Infrastructure.Repositories;
@@ -45,6 +46,11 @@ public class DocumentRepository : Repository<Document>, IDocumentRepository
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+        if (uploadedKey is not null)
+        {
+            var document = _context.Documents.Local.Single(d => d.StorageKey == uploadedKey);
+            await ProcessingScheduler.ScheduleAsync(_context, document, cancellationToken);
+        }
         if (retiredKey is not null)
         {
             await _context.Database.ExecuteSqlInterpolatedAsync($"""
