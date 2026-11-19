@@ -83,7 +83,7 @@ public class DocumentsControllerTests
     public async Task GetFile_ReturnsOriginalFile()
     {
         var bytes = new byte[] { 1, 2, 3 };
-        _service.Setup(x => x.GetDocumentFileAsync(1))
+        _service.Setup(x => x.GetDocumentFileAsync(1, CancellationToken.None))
             .ReturnsAsync(new DocumentFileDto("invoice.pdf", "application/pdf", bytes));
 
         var result = Assert.IsType<FileContentResult>(await _controller.GetFile(1));
@@ -109,14 +109,14 @@ public class DocumentsControllerTests
     [Fact]
     public async Task Delete_Existing_ReturnsNoContent()
     {
-        _service.Setup(x => x.DeleteDocumentAsync(1)).ReturnsAsync(true);
+        _service.Setup(x => x.DeleteDocumentAsync(1, CancellationToken.None)).ReturnsAsync(true);
         Assert.IsType<NoContentResult>(await _controller.Delete(1));
     }
 
     [Fact]
     public async Task Delete_Missing_ReturnsNotFound()
     {
-        _service.Setup(x => x.DeleteDocumentAsync(404)).ReturnsAsync(false);
+        _service.Setup(x => x.DeleteDocumentAsync(404, CancellationToken.None)).ReturnsAsync(false);
         Assert.IsType<NotFoundResult>(await _controller.Delete(404));
     }
 

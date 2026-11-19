@@ -44,7 +44,8 @@ public class DocumentsController : ControllerBase
     /// <summary>Upload and store an original document file.</summary>
     /// <remarks>
     /// The file name, content type, size, and title are derived from the uploaded file.
-    /// The original bytes are preserved in the database. All file types are accepted up to 25 MiB.
+    /// The original bytes are stored in MinIO and verified before the metadata is saved.
+    /// All file types are accepted up to 25 MiB.
     /// </remarks>
     /// <param name="file">The original file to store.</param>
     /// <param name="categoryId">An existing positive category ID, or empty to leave the document unassigned.</param>
@@ -58,6 +59,9 @@ public class DocumentsController : ControllerBase
     [ProducesResponseType(typeof(DocumentResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status413PayloadTooLarge)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status502BadGateway)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<DocumentResponseDto>> Create(
         [Required] IFormFile? file,
         [FromForm, Range(1, int.MaxValue)] int? categoryId,
@@ -78,17 +82,20 @@ public class DocumentsController : ControllerBase
     }
 
     /// <summary>Download a document's original file bytes.</summary>
-    /// <remarks>Returns the stored media type and an attachment file name. Legacy records without bytes return 404.</remarks>
+    /// <remarks>Returns the original from MinIO, or a retained verified legacy copy. Records without an original return 404.</remarks>
     /// <param name="id">A positive document ID.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
     /// <response code="400">The ID is not a positive integer.</response>
     /// <response code="404">No stored file exists with this ID.</response>
     [HttpGet("{id}/file")]
     [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK, "application/octet-stream")]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetFile([Range(1, int.MaxValue)] int id)
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status502BadGateway)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> GetFile([Range(1, int.MaxValue)] int id, CancellationToken cancellationToken = default)
     {
-        var file = await _service.GetDocumentFileAsync(id);
+        var file = await _service.GetDocumentFileAsync(id, cancellationToken);
         return file is null
             ? NotFound()
             : File(file.Content, file.ContentType, file.FileName);
@@ -111,6 +118,9 @@ public class DocumentsController : ControllerBase
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status413PayloadTooLarge)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status502BadGateway)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Update(
         [Range(1, int.MaxValue)] int id,
         IFormFile? file,
@@ -123,8 +133,10 @@ public class DocumentsController : ControllerBase
         return updated ? NoContent() : NotFound();
     }
 
-    /// <summary>Delete a document and its stored file.</summary>
+    /// <summary>Delete document metadata and durably schedule removal of its original.</summary>
+    /// <remarks>File cleanup is attempted immediately and retried in the background if storage is unavailable.</remarks>
     /// <param name="id">A positive document ID.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
     /// <response code="400">The ID is not a positive integer.</response>
     /// <response code="204">The document was deleted.</response>
     /// <response code="404">No document exists with this ID.</response>
@@ -132,9 +144,10 @@ public class DocumentsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Delete([Range(1, int.MaxValue)] int id)
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Delete([Range(1, int.MaxValue)] int id, CancellationToken cancellationToken = default)
     {
-        var deleted = await _service.DeleteDocumentAsync(id);
+        var deleted = await _service.DeleteDocumentAsync(id, cancellationToken);
         return deleted ? NoContent() : NotFound();
     }
 }
