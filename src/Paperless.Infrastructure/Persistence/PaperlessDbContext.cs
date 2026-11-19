@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Paperless.Application.Exceptions;
 using Paperless.Domain.Entities;
+using Paperless.Infrastructure.Processing;
 
 namespace Paperless.Infrastructure.Persistence;
 
@@ -11,6 +12,8 @@ public class PaperlessDbContext : DbContext
     public DbSet<Document> Documents => Set<Document>();
     public DbSet<DocumentCategory> Categories => Set<DocumentCategory>();
     public DbSet<FileCleanupJob> FileCleanupJobs => Set<FileCleanupJob>();
+    public DbSet<DocumentProcessingJob> ProcessingJobs => Set<DocumentProcessingJob>();
+    public DbSet<ProcessingOutboxMessage> ProcessingOutbox => Set<ProcessingOutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -45,6 +48,27 @@ public class PaperlessDbContext : DbContext
             entity.HasKey(job => job.ObjectKey);
             entity.Property(job => job.ObjectKey).HasMaxLength(128);
             entity.HasIndex(job => job.NotBefore);
+        });
+
+        modelBuilder.Entity<DocumentProcessingJob>(entity =>
+        {
+            entity.HasKey(job => job.DocumentId);
+            entity.HasOne<Document>().WithOne().HasForeignKey<DocumentProcessingJob>(job => job.DocumentId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(job => job.JobId).IsUnique();
+            entity.Property(job => job.StorageKey).HasMaxLength(128);
+            entity.Property(job => job.FileSha256).HasMaxLength(64);
+            entity.Property(job => job.State).HasConversion<string>().HasMaxLength(32);
+            entity.Property(job => job.LastErrorCode).HasMaxLength(64);
+            entity.Property(job => job.LastError).HasMaxLength(512);
+        });
+        modelBuilder.Entity<ProcessingOutboxMessage>(entity =>
+        {
+            entity.HasKey(message => message.Id);
+            entity.HasOne<Document>().WithMany().HasForeignKey(message => message.DocumentId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(message => message.Payload).HasMaxLength(8192);
+            entity.Property(message => message.LastError).HasMaxLength(512);
+            entity.HasIndex(message => new { message.PublishedAt, message.AvailableAt });
+            entity.HasIndex(message => new { message.DocumentId, message.JobId });
         });
     }
 

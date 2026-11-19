@@ -44,6 +44,47 @@ services:
     volumes:
       - minio_data:/data
 
+  rabbitmq:
+    image: rabbitmq:4.3-management
+    container_name: paperless-rabbitmq
+    hostname: paperless-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-paperless_queue}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-paperless_queue_password}
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  paperless-worker:
+    build:
+      context: .
+      dockerfile: src/Paperless.Worker/dockerfile
+    container_name: paperless-worker
+    restart: unless-stopped
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=paperless_db;Username=paperless_user;Password=paperless_password;GSS Encryption Mode=Disable
+      - Minio__Endpoint=minio:9000
+      - Minio__AccessKey=${MINIO_ROOT_USER:-paperless_minio}
+      - Minio__SecretKey=${MINIO_ROOT_PASSWORD:-paperless_minio_password}
+      - Processing__HostName=rabbitmq
+      - Processing__UserName=${RABBITMQ_USER:-paperless_queue}
+      - Processing__Password=${RABBITMQ_PASSWORD:-paperless_queue_password}
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
   paperless-rest:
     build:
       context: .
@@ -56,6 +97,9 @@ services:
       - Minio__Endpoint=minio:9000
       - Minio__AccessKey=${MINIO_ROOT_USER:-paperless_minio}
       - Minio__SecretKey=${MINIO_ROOT_PASSWORD:-paperless_minio_password}
+      - Processing__HostName=rabbitmq
+      - Processing__UserName=${RABBITMQ_USER:-paperless_queue}
+      - Processing__Password=${RABBITMQ_PASSWORD:-paperless_queue_password}
     ports:
       - "8081:8081"
     depends_on:
@@ -78,3 +122,4 @@ services:
 volumes:
   postgres_data:
   minio_data:
+  rabbitmq_data:

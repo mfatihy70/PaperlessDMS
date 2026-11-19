@@ -46,6 +46,8 @@ public class DocumentsController : ControllerBase
     /// The file name, content type, size, and title are derived from the uploaded file.
     /// The original bytes are stored in MinIO and verified before the metadata is saved.
     /// All file types are accepted up to 25 MiB.
+    /// A preparation job is saved in the same database transaction. Processing runs asynchronously;
+    /// GET /api/Documents/{id}/processing reports its status. A broker outage does not invalidate a saved upload.
     /// </remarks>
     /// <param name="file">The original file to store.</param>
     /// <param name="categoryId">An existing positive category ID, or empty to leave the document unassigned.</param>

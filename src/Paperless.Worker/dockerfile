@@ -1,0 +1,17 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY src/Paperless.Domain/Paperless.Domain.csproj src/Paperless.Domain/
+COPY src/Paperless.Application/Paperless.Application.csproj src/Paperless.Application/
+COPY src/Paperless.Infrastructure/Paperless.Infrastructure.csproj src/Paperless.Infrastructure/
+COPY src/Paperless.Worker/Paperless.Worker.csproj src/Paperless.Worker/
+RUN dotnet restore src/Paperless.Worker/Paperless.Worker.csproj
+COPY src/Paperless.Domain/ src/Paperless.Domain/
+COPY src/Paperless.Application/ src/Paperless.Application/
+COPY src/Paperless.Infrastructure/ src/Paperless.Infrastructure/
+COPY src/Paperless.Worker/ src/Paperless.Worker/
+RUN dotnet publish src/Paperless.Worker/Paperless.Worker.csproj -c Release --no-restore -o /app/publish
+
+FROM mcr.microsoft.com/dotnet/runtime:10.0
+WORKDIR /app
+COPY --from=build /app/publish .
+ENTRYPOINT ["dotnet", "Paperless.Worker.dll"]
