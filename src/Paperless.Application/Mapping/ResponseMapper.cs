@@ -14,6 +14,8 @@ internal static partial class ResponseMapper
 
     public static partial CategoryResponseDto ToResponse(DocumentCategory category);
 
+    public static partial TagResponseDto ToResponse(Tag tag);
+
     [MapProperty(nameof(Document.FileContent), nameof(DocumentFileDto.Content))]
     public static partial DocumentFileDto ToFile(Document document);
 

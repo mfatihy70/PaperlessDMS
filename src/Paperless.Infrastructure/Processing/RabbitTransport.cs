@@ -15,6 +15,11 @@ internal static class RabbitTransport
     internal const string IndexDeadExchange = "paperless.indexing.dead";
     internal const string IndexDeadQueue = "paperless.document-indexing.dead";
     internal const string IndexRoutingKey = "index";
+    internal const string SummaryExchange = "paperless.summarization";
+    internal const string SummaryQueue = "paperless.document-summarization";
+    internal const string SummaryDeadExchange = "paperless.summarization.dead";
+    internal const string SummaryDeadQueue = "paperless.document-summarization.dead";
+    internal const string SummaryRoutingKey = "summarize";
 
     internal static async Task<IConnection> ConnectAsync(ProcessingOptions options, string name, CancellationToken cancellationToken)
     {
@@ -73,5 +78,23 @@ internal static class RabbitTransport
                 ["x-max-length"] = 10000
             }, cancellationToken: cancellationToken);
         await channel.QueueBindAsync(IndexQueue, IndexExchange, IndexRoutingKey, cancellationToken: cancellationToken);
+        await channel.ExchangeDeclareAsync(SummaryDeadExchange, ExchangeType.Direct, durable: true, cancellationToken: cancellationToken);
+        await channel.QueueDeclareAsync(SummaryDeadQueue, durable: true, exclusive: false, autoDelete: false,
+            arguments: new Dictionary<string, object?> { ["x-queue-type"] = "quorum", ["x-overflow"] = "reject-publish", ["x-max-length"] = 10000 },
+            cancellationToken: cancellationToken);
+        await channel.QueueBindAsync(SummaryDeadQueue, SummaryDeadExchange, DeadRoutingKey, cancellationToken: cancellationToken);
+        await channel.ExchangeDeclareAsync(SummaryExchange, ExchangeType.Direct, durable: true, cancellationToken: cancellationToken);
+        await channel.QueueDeclareAsync(SummaryQueue, durable: true, exclusive: false, autoDelete: false,
+            arguments: new Dictionary<string, object?>
+            {
+                ["x-queue-type"] = "quorum",
+                ["x-dead-letter-exchange"] = SummaryDeadExchange,
+                ["x-dead-letter-routing-key"] = DeadRoutingKey,
+                ["x-dead-letter-strategy"] = "at-least-once",
+                ["x-overflow"] = "reject-publish",
+                ["x-delivery-limit"] = 20,
+                ["x-max-length"] = 10000
+            }, cancellationToken: cancellationToken);
+        await channel.QueueBindAsync(SummaryQueue, SummaryExchange, SummaryRoutingKey, cancellationToken: cancellationToken);
     }
 }

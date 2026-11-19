@@ -35,6 +35,11 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
             "get /api/Documents", "get /api/Documents/{id}", "post /api/Documents",
             "get /api/Documents/{id}/file",
             "get /api/Documents/{id}/text",
+            "get /api/Documents/{id}/summary", "get /api/Documents/{id}/summarization",
+            "post /api/Documents/{id}/summarization/retry",
+            "get /api/Documents/{id}/tags", "put /api/Documents/{id}/tags",
+            "get /api/Tags", "post /api/Tags",
+            "get /api/Tags/{id}", "put /api/Tags/{id}", "delete /api/Tags/{id}",
             "get /api/Documents/search", "post /api/Documents/search/reindex",
             "get /api/Documents/{id}/indexing", "post /api/Documents/{id}/indexing/retry",
             "get /api/Documents/{id}/processing", "post /api/Documents/{id}/processing/retry",
@@ -55,6 +60,16 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
     [InlineData("/api/Documents", "post", "201,400,409,413,502,503")]
     [InlineData("/api/Documents/{id}/file", "get", "200,400,404,502,503")]
     [InlineData("/api/Documents/{id}/text", "get", "200,400,404,409")]
+    [InlineData("/api/Documents/{id}/summary", "get", "200,400,404,409")]
+    [InlineData("/api/Documents/{id}/summarization", "get", "200,400,404")]
+    [InlineData("/api/Documents/{id}/summarization/retry", "post", "202,400,404,409")]
+    [InlineData("/api/Documents/{id}/tags", "get", "200,400,404")]
+    [InlineData("/api/Documents/{id}/tags", "put", "200,400,404")]
+    [InlineData("/api/Tags", "get", "200")]
+    [InlineData("/api/Tags", "post", "201,400,409")]
+    [InlineData("/api/Tags/{id}", "get", "200,400,404")]
+    [InlineData("/api/Tags/{id}", "put", "204,400,404,409")]
+    [InlineData("/api/Tags/{id}", "delete", "204,400,404")]
     [InlineData("/api/Documents/search", "get", "200,400,502,503")]
     [InlineData("/api/Documents/search/reindex", "post", "202")]
     [InlineData("/api/Documents/{id}/indexing", "get", "200,400,404")]
@@ -85,6 +100,11 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
     [InlineData("DocumentSearchHitDto")]
     [InlineData("DocumentIndexingDto")]
     [InlineData("SearchReindexDto")]
+    [InlineData("DocumentSummaryDto")]
+    [InlineData("SummaryStatusDto")]
+    [InlineData("TagResponseDto")]
+    [InlineData("TagRequest")]
+    [InlineData("DocumentTagsRequest")]
     public async Task OpenApi_DescribesEveryDtoField(string schemaName)
     {
         using var document = JsonDocument.Parse(await _client.GetStringAsync("/swagger/v1/swagger.json"));

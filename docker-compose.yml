@@ -136,6 +136,29 @@ services:
       elasticsearch:
         condition: service_healthy
 
+  paperless-summarizer:
+    build:
+      context: .
+      dockerfile: src/Paperless.Summarizer/dockerfile
+    container_name: paperless-summarizer
+    restart: unless-stopped
+    init: true
+    mem_limit: 512m
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=paperless_db;Username=paperless_user;Password=paperless_password;GSS Encryption Mode=Disable
+      - Processing__HostName=rabbitmq
+      - Processing__UserName=${RABBITMQ_USER:-paperless_queue}
+      - Processing__Password=${RABBITMQ_PASSWORD:-paperless_queue_password}
+      - GenAi__Enabled=${GENAI_ENABLED:-false}
+      - GenAi__ApiKey=${GEMINI_API_KEY:-}
+      - GenAi__Model=${GEMINI_MODEL:-gemini-3.8-flash}
+      - GenAi__Language=${GENAI_LANGUAGE:-de}
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
   paperless-rest:
     build:
       context: .

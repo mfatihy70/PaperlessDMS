@@ -15,6 +15,7 @@ internal static class ProcessingScheduler
     internal static async Task ScheduleAsync(PaperlessDbContext context, Document document, CancellationToken cancellationToken)
     {
         // Invalidate the former original's result in the same transaction as replacement/retry.
+        await context.SummaryJobs.Where(job => job.DocumentId == document.Id).ExecuteDeleteAsync(cancellationToken);
         await context.DocumentTexts.Where(text => text.DocumentId == document.Id).ExecuteDeleteAsync(cancellationToken);
         var job = await context.ProcessingJobs.SingleOrDefaultAsync(j => j.DocumentId == document.Id, cancellationToken);
         if (job is null)

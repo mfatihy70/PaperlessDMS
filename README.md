@@ -3,6 +3,8 @@ A Document management system for archiving documents in a FileStore, with automa
 
 The current backend implementation plan is maintained in
 [the backend roadmap](docs/backend-roadmap.md).
+See [the current requirements review](docs/project-status.md) and the separate
+[frontend work list](docs/frontend-backlog.md) for remaining work after AP6.
 
 ## Backend architecture
 
@@ -10,12 +12,13 @@ The backend follows Clean Architecture with compile-time dependencies directed t
 
 | Project | Responsibilities | Project dependencies |
 | --- | --- | --- |
-| `Paperless.Domain` | Framework-independent document and category entities | None |
-| `Paperless.Application` | Document/category use cases, application validation, mapping, DTOs and repository contracts | Domain |
-| `Paperless.Infrastructure` | EF Core/PostgreSQL, MinIO, RabbitMQ, outbox delivery, file cleanup and operator commands | Application, Domain |
+| `Paperless.Domain` | Framework-independent document, category, tag and processing entities | None |
+| `Paperless.Application` | Document/category/tag/summary use cases, application validation, mapping, DTOs and repository contracts | Domain |
+| `Paperless.Infrastructure` | EF Core/PostgreSQL, MinIO, RabbitMQ, Elasticsearch/Gemini adapters, outbox delivery and file cleanup | Application, Domain |
 | `Paperless.REST` | HTTP controllers, request validation, Swagger, exception translation and dependency wiring | Application, Infrastructure |
 | `Paperless.Worker` | Separate RabbitMQ consumer; verifies originals and recognizes text with Tesseract/Poppler | Application, Infrastructure |
 | `Paperless.Indexer` | Separate RabbitMQ consumer; indexes current OCR results and recovers the derived Elasticsearch index | Application, Infrastructure |
+| `Paperless.Summarizer` | Separate RabbitMQ consumer; summarizes saved OCR through Gemini and persists versioned results | Application, Infrastructure |
 
 ```mermaid
 flowchart LR
@@ -25,6 +28,8 @@ flowchart LR
     Worker -->|composition root only| Infrastructure
     Indexer[Paperless.Indexer] --> Application
     Indexer -->|composition root only| Infrastructure
+    Summarizer[Paperless.Summarizer] --> Application
+    Summarizer -->|composition root only| Infrastructure
     Infrastructure --> Application
     Infrastructure --> Domain[Paperless.Domain]
     Application --> Domain
@@ -34,7 +39,7 @@ flowchart LR
 Controllers depend on application service interfaces; they do not access repositories or EF Core.
 Infrastructure implements repository interfaces declared by Application. Domain has no NuGet dependencies.
 Application uses Mapperly only at build time; neither project depends on ASP.NET Core or EF Core.
-The REST API, OCR worker and search indexer run as separate processes and use the same application core.
+The REST API, OCR worker, search indexer and GenAI summarizer run as separate processes and use the same application core.
 
 ### Response mapping
 
@@ -78,7 +83,8 @@ Response DTO XML documentation is generated in Application and loaded alongside 
   The status and text APIs work independently of Swagger UI.
   See [processing and recovery](docs/processing.md) and [the manual single-PR workflow](docs/processing-git.md).
   See [the OCR guide](docs/ocr.md) and [the search upgrade and API guide](docs/search.md).
-  GenAI, tags and the XML access-log batch follow according to [the roadmap](docs/backend-roadmap.md).
+  GenAI summaries and manual tags are described in [the setup and API guide](docs/genai.md).
+  The XML access-log batch remains open according to [the roadmap](docs/backend-roadmap.md).
 - The REST Docker build context is the repository root so all four backend projects are available. Compose and the
   container-publishing workflow use that context. The root `.dockerignore` excludes local build outputs and unrelated caches.
 
@@ -190,6 +196,16 @@ Restart `npm start` after changing `proxy.conf.json`.
 | GET | `/api/Documents/{id}/indexing` | Read independent search-index status | 200 |
 | POST | `/api/Documents/{id}/indexing/retry` | Reschedule failed or missing indexing | 202 |
 | POST | `/api/Documents/search/reindex` | Reschedule the derived index from PostgreSQL without OCR | 202 |
+| GET | `/api/Documents/{id}/summary` | Read the persisted summary of the current original | 200 |
+| GET | `/api/Documents/{id}/summarization` | Read independent summary status and safe errors | 200 |
+| POST | `/api/Documents/{id}/summarization/retry` | Reschedule failed or missing summary generation after OCR | 202 |
+| GET | `/api/Documents/{id}/tags` | List assigned manual tags | 200 |
+| PUT | `/api/Documents/{id}/tags` | Atomically replace the complete tag assignment | 200 |
+| GET | `/api/Tags` | List tags | 200 |
+| POST | `/api/Tags` | Create a tag with a unique normalized name | 201 |
+| GET | `/api/Tags/{id}` | Read a tag | 200 |
+| PUT | `/api/Tags/{id}` | Replace tag name and description | 204 |
+| DELETE | `/api/Tags/{id}` | Delete a tag and assignments, preserving documents | 204 |
 | GET | `/api/Categories` | List categories | 200 |
 | GET | `/api/Categories/{id}` | Get a category | 200 |
 | POST | `/api/Categories` | Create a category | 201 |
@@ -249,7 +265,12 @@ OCR supports PDF, PNG and JPEG. Recognized text is stored in PostgreSQL and retu
 Other uploaded file types remain downloadable and produce an `UnsupportedDocumentFormat` processing failure.
 Full-text search uses a separate Elasticsearch indexer; search candidates are validated against current PostgreSQL documents.
 See [search setup, consistency and recovery](docs/search.md) and [the single-PR workflow](docs/search-git.md).
-AI summaries, tagging and the XML access-log batch are not implemented yet.
+AI summaries run after OCR through a separate worker; manual tags have their own CRUD and assignment endpoints.
+GenAI is disabled by default. Copy `.env.example` to a local `.env`, configure a Gemini key and explicitly enable
+the worker as explained in [the GenAI and tags guide](docs/genai.md). Enabling it also processes existing queued OCR results.
+The provider receives OCR text, while the API reads only persisted results. Tags do not require a provider connection.
+See [local checks and their limits](docs/genai-checks.md) and [the manual single-PR Git workflow](docs/genai-git.md).
+The XML access-log batch is the remaining planned backend package.
 New controller actions are automatically included in Swagger; add XML comments and `ProducesResponseType`
 attributes to describe them. The OpenAPI document is generated as JSON; no separate OpenAPI YAML is maintained.
 
