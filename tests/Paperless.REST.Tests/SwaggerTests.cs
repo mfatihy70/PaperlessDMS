@@ -35,6 +35,8 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
             "get /api/Documents", "get /api/Documents/{id}", "post /api/Documents",
             "get /api/Documents/{id}/file",
             "get /api/Documents/{id}/text",
+            "get /api/Documents/search", "post /api/Documents/search/reindex",
+            "get /api/Documents/{id}/indexing", "post /api/Documents/{id}/indexing/retry",
             "get /api/Documents/{id}/processing", "post /api/Documents/{id}/processing/retry",
             "put /api/Documents/{id}", "delete /api/Documents/{id}",
             "get /api/Categories", "post /api/Categories",
@@ -53,6 +55,10 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
     [InlineData("/api/Documents", "post", "201,400,409,413,502,503")]
     [InlineData("/api/Documents/{id}/file", "get", "200,400,404,502,503")]
     [InlineData("/api/Documents/{id}/text", "get", "200,400,404,409")]
+    [InlineData("/api/Documents/search", "get", "200,400,502,503")]
+    [InlineData("/api/Documents/search/reindex", "post", "202")]
+    [InlineData("/api/Documents/{id}/indexing", "get", "200,400,404")]
+    [InlineData("/api/Documents/{id}/indexing/retry", "post", "202,400,404,409")]
     [InlineData("/api/Documents/{id}/processing", "get", "200,400,404")]
     [InlineData("/api/Documents/{id}/processing/retry", "post", "202,400,404,409")]
     [InlineData("/api/Documents/{id}", "put", "204,400,404,409,413,502,503")]
@@ -75,6 +81,10 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
     [InlineData("CategoryResponseDto")]
     [InlineData("ProcessingStatusDto")]
     [InlineData("DocumentTextDto")]
+    [InlineData("DocumentSearchDto")]
+    [InlineData("DocumentSearchHitDto")]
+    [InlineData("DocumentIndexingDto")]
+    [InlineData("SearchReindexDto")]
     public async Task OpenApi_DescribesEveryDtoField(string schemaName)
     {
         using var document = JsonDocument.Parse(await _client.GetStringAsync("/swagger/v1/swagger.json"));

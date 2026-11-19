@@ -91,6 +91,51 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.6
+    container_name: paperless-elasticsearch
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 2.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.ml.enabled=false
+      - node.store.allow_mmap=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=1s' >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  paperless-indexer:
+    build:
+      context: .
+      dockerfile: src/Paperless.Indexer/dockerfile
+    container_name: paperless-indexer
+    restart: unless-stopped
+    init: true
+    mem_limit: 512m
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=paperless_db;Username=paperless_user;Password=paperless_password;GSS Encryption Mode=Disable
+      - Processing__HostName=rabbitmq
+      - Processing__UserName=${RABBITMQ_USER:-paperless_queue}
+      - Processing__Password=${RABBITMQ_PASSWORD:-paperless_queue_password}
+      - Search__Endpoint=http://elasticsearch:9200
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+
   paperless-rest:
     build:
       context: .
@@ -100,6 +145,7 @@ services:
     environment:
       - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=paperless_db;Username=paperless_user;Password=paperless_password;GSS Encryption Mode=Disable
       - ASPNETCORE_ENVIRONMENT=Development
+      - Search__Endpoint=http://elasticsearch:9200
       - Minio__Endpoint=minio:9000
       - Minio__AccessKey=${MINIO_ROOT_USER:-paperless_minio}
       - Minio__SecretKey=${MINIO_ROOT_PASSWORD:-paperless_minio_password}
@@ -129,3 +175,4 @@ volumes:
   postgres_data:
   minio_data:
   rabbitmq_data:
+  elasticsearch_data:

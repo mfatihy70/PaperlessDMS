@@ -5,9 +5,9 @@ using Paperless.Infrastructure.Persistence;
 
 namespace Paperless.Infrastructure.Processing;
 
-internal sealed class OutboxRepository(IDbContextFactory<PaperlessDbContext> factory, IOptions<ProcessingOptions> options)
+internal sealed class OutboxRepository(IDbContextFactory<PaperlessDbContext> factory, IOptions<ProcessingOptions> options) : IOutboxStore
 {
-    internal async Task RecoverAsync(CancellationToken cancellationToken)
+    public async Task RecoverAsync(CancellationToken cancellationToken)
     {
         await using var context = await factory.CreateDbContextAsync(cancellationToken);
         var now = DateTime.UtcNow;
@@ -26,7 +26,7 @@ internal sealed class OutboxRepository(IDbContextFactory<PaperlessDbContext> fac
         await context.ProcessingOutbox.Where(m => m.IsDeadLetter && m.PublishedAt < retention).ExecuteDeleteAsync(cancellationToken);
     }
 
-    internal async Task<ProcessingOutboxMessage?> ClaimAsync(CancellationToken cancellationToken)
+    public async Task<OutboxDelivery?> ClaimAsync(CancellationToken cancellationToken)
     {
         await using var context = await factory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
@@ -43,10 +43,14 @@ internal sealed class OutboxRepository(IDbContextFactory<PaperlessDbContext> fac
         message.PublishAttempts++;
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return message;
+        return new OutboxDelivery(message.Id, message.DocumentId, message.JobId.ToString(), message.Payload,
+            message.PublishLeaseId.Value, message.PublishAttempts,
+            message.IsDeadLetter ? RabbitTransport.DeadExchange : RabbitTransport.Exchange,
+            message.IsDeadLetter ? RabbitTransport.DeadRoutingKey : RabbitTransport.RoutingKey,
+            message.IsDeadLetter ? "preparation-failed.v1" : "prepare-document.v1");
     }
 
-    internal async Task CompleteAsync(ProcessingOutboxMessage message, bool published, CancellationToken cancellationToken)
+    public async Task CompleteAsync(OutboxDelivery message, bool published, CancellationToken cancellationToken)
     {
         await using var context = await factory.CreateDbContextAsync(cancellationToken);
         var now = DateTime.UtcNow;

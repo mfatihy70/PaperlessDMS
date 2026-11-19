@@ -23,6 +23,8 @@ namespace Paperless.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.HasSequence("SearchIndexRevisions", "public");
+
             modelBuilder.Entity("Paperless.Domain.Entities.Document", b =>
                 {
                     b.Property<int>("Id")
@@ -208,6 +210,64 @@ namespace Paperless.Infrastructure.Persistence.Migrations
                     b.ToTable("DocumentTexts", "public");
                 });
 
+            modelBuilder.Entity("Paperless.Domain.Entities.SearchIndexJob", b =>
+                {
+                    b.Property<int>("DocumentId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("LastErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("LeaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("LeaseUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Revision")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("SourceJobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("DocumentId");
+
+                    b.ToTable("SearchIndexJobs", "public");
+                });
+
             modelBuilder.Entity("Paperless.Infrastructure.Persistence.FileCleanupJob", b =>
                 {
                     b.Property<string>("ObjectKey")
@@ -278,6 +338,75 @@ namespace Paperless.Infrastructure.Persistence.Migrations
                     b.ToTable("ProcessingOutbox", "public");
                 });
 
+            modelBuilder.Entity("Paperless.Infrastructure.Search.SearchIndexCatalog", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Identity")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SearchIndexCatalog", "public");
+                });
+
+            modelBuilder.Entity("Paperless.Infrastructure.Search.SearchOutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AvailableAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DocumentId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsDeadLetter")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasMaxLength(8192)
+                        .HasColumnType("character varying(8192)");
+
+                    b.Property<int>("PublishAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("PublishLeaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("PublishLeaseUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Revision")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DocumentId", "Revision");
+
+                    b.HasIndex("PublishedAt", "AvailableAt");
+
+                    b.ToTable("SearchOutbox", "public");
+                });
+
             modelBuilder.Entity("Paperless.Domain.Entities.Document", b =>
                 {
                     b.HasOne("Paperless.Domain.Entities.DocumentCategory", "Category")
@@ -309,6 +438,15 @@ namespace Paperless.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Paperless.Infrastructure.Processing.ProcessingOutboxMessage", b =>
                 {
                     b.HasOne("Paperless.Domain.Entities.Document", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Paperless.Infrastructure.Search.SearchOutboxMessage", b =>
+                {
+                    b.HasOne("Paperless.Domain.Entities.SearchIndexJob", null)
                         .WithMany()
                         .HasForeignKey("DocumentId")
                         .OnDelete(DeleteBehavior.Cascade)

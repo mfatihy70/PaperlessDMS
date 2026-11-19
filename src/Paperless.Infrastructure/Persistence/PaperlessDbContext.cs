@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperless.Application.Exceptions;
 using Paperless.Domain.Entities;
 using Paperless.Infrastructure.Processing;
+using Paperless.Infrastructure.Search;
 
 namespace Paperless.Infrastructure.Persistence;
 
@@ -15,11 +16,15 @@ public class PaperlessDbContext : DbContext
     public DbSet<DocumentProcessingJob> ProcessingJobs => Set<DocumentProcessingJob>();
     public DbSet<ProcessingOutboxMessage> ProcessingOutbox => Set<ProcessingOutboxMessage>();
     public DbSet<DocumentText> DocumentTexts => Set<DocumentText>();
+    public DbSet<SearchIndexJob> SearchIndexJobs => Set<SearchIndexJob>();
+    public DbSet<SearchOutboxMessage> SearchOutbox => Set<SearchOutboxMessage>();
+    public DbSet<SearchIndexCatalog> SearchIndexCatalog => Set<SearchIndexCatalog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.HasDefaultSchema("public");
+        modelBuilder.HasSequence<long>("SearchIndexRevisions", "public");
 
         modelBuilder.Entity<Document>(entity =>
         {
@@ -79,6 +84,30 @@ public class PaperlessDbContext : DbContext
             entity.Property(text => text.StorageKey).HasMaxLength(128);
             entity.Property(text => text.Text).HasMaxLength(1_000_000);
             entity.Property(text => text.Language).HasMaxLength(64);
+        });
+        modelBuilder.Entity<SearchIndexJob>(entity =>
+        {
+            entity.HasKey(job => job.DocumentId);
+            entity.Property(job => job.DocumentId).ValueGeneratedNever();
+            entity.Property(job => job.Action).HasConversion<string>().HasMaxLength(16);
+            entity.Property(job => job.State).HasConversion<string>().HasMaxLength(32);
+            entity.Property(job => job.LastErrorCode).HasMaxLength(64);
+            entity.Property(job => job.LastError).HasMaxLength(512);
+        });
+        modelBuilder.Entity<SearchOutboxMessage>(entity =>
+        {
+            entity.HasKey(message => message.Id);
+            entity.HasOne<SearchIndexJob>().WithMany().HasForeignKey(message => message.DocumentId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(message => message.Payload).HasMaxLength(8192);
+            entity.Property(message => message.LastError).HasMaxLength(512);
+            entity.HasIndex(message => new { message.PublishedAt, message.AvailableAt });
+            entity.HasIndex(message => new { message.DocumentId, message.Revision });
+        });
+        modelBuilder.Entity<SearchIndexCatalog>(entity =>
+        {
+            entity.HasKey(catalog => catalog.Id);
+            entity.Property(catalog => catalog.Id).ValueGeneratedNever();
+            entity.Property(catalog => catalog.Identity).HasMaxLength(255);
         });
     }
 

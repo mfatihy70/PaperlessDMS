@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperless.Application.Abstractions;
 using Paperless.Domain.Entities;
 using Paperless.Infrastructure.Persistence;
+using Paperless.Infrastructure.Search;
 
 namespace Paperless.Infrastructure.Processing;
 
@@ -33,6 +34,7 @@ internal static class ProcessingScheduler
         job.LastError = job.LastErrorCode = null;
         Enqueue(context, job, job.CreatedAt);
         await context.SaveChangesAsync(cancellationToken);
+        await SearchIndexScheduler.QueueAsync(context, document.Id, cancellationToken);
     }
 
     internal static void Enqueue(PaperlessDbContext context, DocumentProcessingJob job, DateTime availableAt)

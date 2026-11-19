@@ -10,6 +10,7 @@ using Paperless.Infrastructure.Ocr;
 using Paperless.Infrastructure.Processing;
 using Paperless.Infrastructure.Repositories;
 using Paperless.Infrastructure.Storage;
+using Paperless.Infrastructure.Search;
 
 namespace Paperless.Infrastructure;
 
@@ -17,8 +18,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, string? connectionString, IConfiguration configuration, bool runFileCleanup = true)
     {
-        services.AddDbContextFactory<PaperlessDbContext>(options => options.UseNpgsql(connectionString, postgres =>
-            postgres.MigrationsHistoryTable("__EFMigrationsHistory", "public")));
+        services.AddPaperlessPersistence(connectionString);
         services.AddOptions<MinioStorageOptions>().Bind(configuration.GetSection("Minio"))
             .Validate(options => Uri.TryCreate($"http://{options.Endpoint}", UriKind.Absolute, out var endpoint) &&
                 endpoint.AbsolutePath == "/" && endpoint.UserInfo.Length == 0 && endpoint.Host.Length > 0 &&
@@ -44,11 +44,18 @@ public static class DependencyInjection
         services.AddScoped<FileMigrationService>();
         services.AddScoped<IDocumentRepository, DocumentRepository>();
         services.AddScoped<IRepository<DocumentCategory>, Repository<DocumentCategory>>();
+        return services;
+    }
+
+    public static IServiceCollection AddPaperlessPersistence(this IServiceCollection services, string? connectionString)
+    {
+        services.AddDbContextFactory<PaperlessDbContext>(options => options.UseNpgsql(connectionString, postgres =>
+            postgres.MigrationsHistoryTable("__EFMigrationsHistory", "public")));
         services.AddScoped<IDatabaseInitializer, DatabaseInitializer>();
         return services;
     }
 
-    public static IServiceCollection AddDocumentProcessing(this IServiceCollection services, IConfiguration configuration, bool dispatchOutbox)
+    public static IServiceCollection AddMessaging(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddOptions<ProcessingOptions>().Bind(configuration.GetSection("Processing"))
             .Validate(o => !string.IsNullOrWhiteSpace(o.HostName) && !o.HostName.Contains('/') && o.Port is >= 1 and <= 65535 &&
@@ -58,15 +65,46 @@ public static class DependencyInjection
                 o.LeaseSeconds is >= 60 and <= 600 && o.MaxAttempts is >= 1 and <= 10 &&
                 o.RetryDelaySeconds is >= 1 and <= 300 && o.RedeliverySeconds is >= 30 and <= 3600,
                 "Invalid processing timeout, lease, retry or recovery settings.")
-            .Validate<IOptions<MinioStorageOptions>>((o, storage) => o.LeaseSeconds >= storage.Value.TimeoutSeconds + 30,
-                "Processing:LeaseSeconds must exceed the MinIO timeout by at least 30 seconds.")
             .ValidateOnStart();
+        return services;
+    }
+
+    public static IServiceCollection AddDocumentProcessing(this IServiceCollection services, IConfiguration configuration, bool dispatchOutbox)
+    {
+        services.AddMessaging(configuration);
         services.AddScoped<IProcessingRepository, ProcessingRepository>();
         if (dispatchOutbox)
         {
-            services.AddSingleton<OutboxRepository>();
+            services.AddSingleton<IOutboxStore, OutboxRepository>();
+            services.AddSingleton<IOutboxStore, SearchOutboxRepository>();
             services.AddHostedService<OutboxPublisher>();
         }
+        return services;
+    }
+
+    public static IServiceCollection AddDocumentSearch(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<SearchOptions>().Bind(configuration.GetSection("Search"))
+            .Validate(o => Uri.TryCreate(o.Endpoint, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" &&
+                uri.UserInfo.Length == 0 && uri.AbsolutePath == "/" && uri.Query.Length == 0 && uri.Fragment.Length == 0,
+                "Search:Endpoint must be an HTTP(S) service root without credentials, path or query.")
+            .Validate(o => o.IndexName is not null && System.Text.RegularExpressions.Regex.IsMatch(o.IndexName, "^paperless-[a-z0-9][a-z0-9_-]{1,90}$"),
+                "Search:IndexName must be a lowercase paperless- index name.")
+            .Validate(o => o.TimeoutSeconds is >= 1 and <= 60 && o.LeaseSeconds is >= 30 and <= 600 &&
+                o.LeaseSeconds >= o.TimeoutSeconds * 4 + 10 && o.ReconcileIntervalSeconds is >= 2 and <= 300,
+                "Invalid search timeout, lease or recovery interval. Lease must cover index creation and writing.")
+            .Validate(o => o.ApiKey is null || !o.ApiKey.Any(char.IsControl), "Search API key must not contain control characters.")
+            .ValidateOnStart();
+        services.AddHttpClient<ISearchIndex, ElasticsearchIndex>((provider, client) =>
+        {
+            var settings = provider.GetRequiredService<IOptions<SearchOptions>>().Value;
+            client.BaseAddress = new Uri(settings.Endpoint.TrimEnd('/') + "/");
+            client.Timeout = Timeout.InfiniteTimeSpan;
+            client.MaxResponseContentBufferSize = 2_097_152;
+            if (!string.IsNullOrEmpty(settings.ApiKey)) client.DefaultRequestHeaders.Authorization = new("ApiKey", settings.ApiKey);
+        });
+        services.AddScoped<ISearchRepository, SearchRepository>();
+        services.AddScoped<Paperless.Application.Services.DocumentIndexing>();
         return services;
     }
 
