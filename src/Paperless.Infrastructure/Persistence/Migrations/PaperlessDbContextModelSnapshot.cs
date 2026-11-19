@@ -49,17 +49,34 @@ namespace Paperless.Infrastructure.Persistence.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<string>("FileSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<long>("FileSizeBytes")
                         .HasColumnType("bigint");
+
+                    b.Property<string>("StorageKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
 
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CategoryId");
+
+                    b.HasIndex("StorageKey")
+                        .IsUnique();
 
                     b.ToTable("Documents", "public");
                 });
@@ -83,6 +100,25 @@ namespace Paperless.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Categories", "public");
+                });
+
+            modelBuilder.Entity("Paperless.Infrastructure.Persistence.FileCleanupJob", b =>
+                {
+                    b.Property<string>("ObjectKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("NotBefore")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ObjectKey");
+
+                    b.HasIndex("NotBefore");
+
+                    b.ToTable("FileCleanupJobs", "public");
                 });
 
             modelBuilder.Entity("Paperless.Domain.Entities.Document", b =>

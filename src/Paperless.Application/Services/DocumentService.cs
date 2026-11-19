@@ -3,6 +3,7 @@ using Paperless.Application.Abstractions;
 using Paperless.Application.DTOs;
 using Paperless.Application.Exceptions;
 using Paperless.Application.Mapping;
+using Paperless.Application.Storage;
 using Paperless.Domain.Entities;
 
 namespace Paperless.Application.Services;
@@ -13,11 +14,13 @@ public sealed class DocumentService : IDocumentService
 
     private readonly IDocumentRepository _docRepo;
     private readonly IRepository<DocumentCategory> _categoryRepo;
+    private readonly IFileStorage _fileStorage;
 
-    public DocumentService(IDocumentRepository docRepo, IRepository<DocumentCategory> categoryRepo)
+    public DocumentService(IDocumentRepository docRepo, IRepository<DocumentCategory> categoryRepo, IFileStorage fileStorage)
     {
         _docRepo = docRepo;
         _categoryRepo = categoryRepo;
+        _fileStorage = fileStorage;
     }
 
     public async Task<IEnumerable<DocumentResponseDto>> GetAllDocumentsAsync()
@@ -40,6 +43,7 @@ public sealed class DocumentService : IDocumentService
     {
         await ValidateCategoryAsync(categoryId);
         var uploadedFile = await ReadUploadAsync(file, cancellationToken);
+        var storedFile = await StoreVerifiedAsync(uploadedFile, cancellationToken);
         var title = Path.GetFileNameWithoutExtension(uploadedFile.FileName);
         if (string.IsNullOrWhiteSpace(title))
             title = uploadedFile.FileName;
@@ -50,27 +54,45 @@ public sealed class DocumentService : IDocumentService
             FileName = uploadedFile.FileName,
             ContentType = uploadedFile.ContentType,
             FileSizeBytes = uploadedFile.Content.Length,
-            FileContent = uploadedFile.Content,
+            StorageKey = storedFile.Key,
+            FileSha256 = storedFile.Sha256,
             CategoryId = categoryId,
             CreatedAt = DateTime.UtcNow
         };
 
         await _docRepo.AddAsync(document);
-        await _docRepo.SaveChangesAsync();
+        await _docRepo.SaveFileChangesAsync(storedFile.Key, null, cancellationToken);
 
         var created = await _docRepo.GetByIdWithCategoryAsync(document.Id);
         return ResponseMapper.ToResponse(created ?? throw new InvalidOperationException("The saved document could not be loaded."));
     }
 
-    public async Task<DocumentFileDto?> GetDocumentFileAsync(int id)
+    public async Task<DocumentFileDto?> GetDocumentFileAsync(int id, CancellationToken cancellationToken = default)
     {
         ValidateId(id);
         var document = await _docRepo.GetByIdAsync(id);
-        var content = document?.FileContent;
-        if (document is null || content is not { Length: > 0 })
+        if (document is null)
             return null;
 
-        return ResponseMapper.ToFile(document);
+        if (document.StorageKey is not null)
+        {
+            try
+            {
+                var content = await _fileStorage.ReadAsync(document.StorageKey, cancellationToken);
+                FileIntegrity.Verify(content, document.FileSha256, document.FileSizeBytes);
+                return new DocumentFileDto(document.FileName, document.ContentType, content);
+            }
+            catch (Exception exception) when (
+                exception is FileStorageUnavailableException or FileStorageIntegrityException &&
+                document.FileContent is { Length: > 0 })
+            {
+                // A verified legacy copy remains available until the operator explicitly purges it.
+                FileIntegrity.Verify(document.FileContent, document.FileSha256, document.FileSizeBytes);
+                return ResponseMapper.ToFile(document);
+            }
+        }
+
+        return document.FileContent is { Length: > 0 } ? ResponseMapper.ToFile(document) : null;
     }
 
     public async Task<bool> UpdateDocumentAsync(
@@ -88,9 +110,13 @@ public sealed class DocumentService : IDocumentService
         var uploadedFile = file is null
             ? null
             : await ReadUploadAsync(file, cancellationToken);
+        string? uploadedKey = null;
+        var previousKey = document.StorageKey;
 
         if (uploadedFile is not null)
         {
+            var storedFile = await StoreVerifiedAsync(uploadedFile, cancellationToken);
+            uploadedKey = storedFile.Key;
             var title = Path.GetFileNameWithoutExtension(uploadedFile.FileName);
             document.Title = string.IsNullOrWhiteSpace(title)
                 ? uploadedFile.FileName
@@ -98,16 +124,20 @@ public sealed class DocumentService : IDocumentService
             document.FileName = uploadedFile.FileName;
             document.ContentType = uploadedFile.ContentType;
             document.FileSizeBytes = uploadedFile.Content.Length;
-            document.FileContent = uploadedFile.Content;
+            document.StorageKey = storedFile.Key;
+            document.FileSha256 = storedFile.Sha256;
+            document.FileContent = null;
         }
 
         document.CategoryId = categoryId;
         _docRepo.Update(document);
-        await _docRepo.SaveChangesAsync();
+        await _docRepo.SaveFileChangesAsync(uploadedKey, uploadedKey is null ? null : previousKey, cancellationToken);
+        if (uploadedKey is not null)
+            await TryDeleteRetiredAsync(previousKey);
         return true;
     }
 
-    public async Task<bool> DeleteDocumentAsync(int id)
+    public async Task<bool> DeleteDocumentAsync(int id, CancellationToken cancellationToken = default)
     {
         ValidateId(id);
         var document = await _docRepo.GetByIdAsync(id);
@@ -115,8 +145,35 @@ public sealed class DocumentService : IDocumentService
             return false;
 
         _docRepo.Delete(document);
-        await _docRepo.SaveChangesAsync();
+        await _docRepo.SaveFileChangesAsync(null, document.StorageKey, cancellationToken);
+        await TryDeleteRetiredAsync(document.StorageKey);
         return true;
+    }
+
+    private async Task<(string Key, string Sha256)> StoreVerifiedAsync(
+        UploadedDocumentFile file, CancellationToken cancellationToken)
+    {
+        var sha256 = FileIntegrity.Sha256(file.Content);
+        var key = await _docRepo.BeginFileUploadAsync(cancellationToken);
+        await _fileStorage.WriteAsync(key, file.Content, file.ContentType, cancellationToken);
+        var stored = await _fileStorage.ReadAsync(key, cancellationToken);
+        FileIntegrity.Verify(stored, sha256, file.Content.LongLength);
+        return (key, sha256);
+    }
+
+    private async Task TryDeleteRetiredAsync(string? key)
+    {
+        if (key is null)
+            return;
+        try
+        {
+            // Deletion is already durably queued; request cancellation must not discard it.
+            await _fileStorage.DeleteAsync(key, CancellationToken.None);
+        }
+        catch (Exception exception) when (exception is FileStorageUnavailableException or FileStorageIntegrityException)
+        {
+            // The adapter logs the failure; the cleanup worker retries the durable job.
+        }
     }
 
     private async Task ValidateCategoryAsync(int? categoryId)

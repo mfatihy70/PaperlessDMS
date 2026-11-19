@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Moq;
 using Paperless.Infrastructure.Persistence;
+using Paperless.Infrastructure.Storage;
 
 namespace Paperless.REST.Tests;
 
@@ -46,10 +47,10 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
     [Theory]
     [InlineData("/api/Documents", "get", "200")]
     [InlineData("/api/Documents/{id}", "get", "200,400,404")]
-    [InlineData("/api/Documents", "post", "201,400,413")]
-    [InlineData("/api/Documents/{id}/file", "get", "200,400,404")]
-    [InlineData("/api/Documents/{id}", "put", "204,400,404,413")]
-    [InlineData("/api/Documents/{id}", "delete", "204,400,404")]
+    [InlineData("/api/Documents", "post", "201,400,409,413,502,503")]
+    [InlineData("/api/Documents/{id}/file", "get", "200,400,404,502,503")]
+    [InlineData("/api/Documents/{id}", "put", "204,400,404,409,413,502,503")]
+    [InlineData("/api/Documents/{id}", "delete", "204,400,404,409")]
     [InlineData("/api/Categories", "get", "200")]
     [InlineData("/api/Categories", "post", "201,400")]
     public async Task OpenApi_DescribesActualResponseCodes(string path, string method, string expectedCodes)
@@ -117,6 +118,7 @@ public class SwaggerTests(SwaggerTests.ApiFactory factory) : IClassFixture<Swagg
         {
             builder.ConfigureServices(services =>
             {
+                services.Configure<MinioStorageOptions>(options => options.CleanupEnabled = false);
                 // Only bypass database initialization. Exercise the real Program, controllers and Swagger middleware.
                 var initializer = new Mock<IDatabaseInitializer>();
                 initializer.Setup(db => db.InitializeAsync(It.IsAny<CancellationToken>()))

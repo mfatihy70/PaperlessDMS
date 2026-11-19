@@ -4,15 +4,24 @@ using Paperless.Application.Abstractions;
 using Paperless.Application.Services;
 using Paperless.Infrastructure;
 using Paperless.Infrastructure.Persistence;
+using Paperless.Infrastructure.Storage;
 using Paperless.REST.ExceptionHandling;
 
-var builder = WebApplication.CreateBuilder(args);
+var fileCommand = args.Length > 0 && args[0] == "files";
+if (fileCommand && (args.Length != 2 || args[1] is not ("status" or "migrate" or "verify" or "purge" or "cleanup")))
+{
+    Console.Error.WriteLine("Usage: Paperless.REST files status|migrate|verify|purge|cleanup");
+    Environment.ExitCode = 2;
+    return;
+}
+var builder = WebApplication.CreateBuilder(fileCommand ? [] : args);
 
 // 1. Add Controllers
 builder.Services.AddControllers(options =>
     options.ModelMetadataDetailsProviders.Add(new SystemTextJsonValidationMetadataProvider()));
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApplicationValidationExceptionHandler>();
+builder.Services.AddExceptionHandler<FileStorageExceptionHandler>();
 
 // 2. Add Swagger / OpenAPI
 builder.Services.AddEndpointsApiExplorer();
@@ -33,7 +42,7 @@ builder.Services.AddSwaggerGen(options =>
 
 // 3. Database Context
 var connString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddInfrastructure(connString);
+builder.Services.AddInfrastructure(connString, builder.Configuration);
 
 // 4. DI Registrations
 builder.Services.AddScoped<IDocumentService, DocumentService>();
@@ -67,6 +76,19 @@ app.UseSwaggerUI(c =>
 using (var scope = app.Services.CreateScope())
 {
     await scope.ServiceProvider.GetRequiredService<IDatabaseInitializer>().InitializeAsync();
+}
+
+if (fileCommand)
+{
+    using var cancellation = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, eventArgs) => { eventArgs.Cancel = true; cancellation.Cancel(); };
+    await using (var scope = app.Services.CreateAsyncScope())
+    {
+        Environment.ExitCode = await scope.ServiceProvider.GetRequiredService<FileMigrationService>()
+            .RunAsync(args[1], cancellation.Token);
+    }
+    await app.DisposeAsync();
+    return;
 }
 
 app.UseAuthorization();

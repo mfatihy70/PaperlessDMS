@@ -29,6 +29,21 @@ services:
     depends_on:
       - db
 
+  minio:
+    build:
+      context: ./docker/minio
+    image: paperless-minio:local
+    container_name: paperless-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-paperless_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-paperless_minio_password}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio_data:/data
+
   paperless-rest:
     build:
       context: .
@@ -36,12 +51,17 @@ services:
     container_name: paperless-rest
     restart: always
     environment:
-      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=paperless_db;Username=paperless_user;Password=paperless_password
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=paperless_db;Username=paperless_user;Password=paperless_password;GSS Encryption Mode=Disable
       - ASPNETCORE_ENVIRONMENT=Development
+      - Minio__Endpoint=minio:9000
+      - Minio__AccessKey=${MINIO_ROOT_USER:-paperless_minio}
+      - Minio__SecretKey=${MINIO_ROOT_PASSWORD:-paperless_minio_password}
     ports:
       - "8081:8081"
     depends_on:
       db:
+        condition: service_healthy
+      minio:
         condition: service_healthy
 
   paperless-ui:
@@ -57,3 +77,4 @@ services:
 
 volumes:
   postgres_data:
+  minio_data:

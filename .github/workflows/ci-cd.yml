@@ -79,6 +79,9 @@ jobs:
           - service: rest
             context: .
             dockerfile: ./src/Paperless.REST/dockerfile
+          - service: minio
+            context: ./docker/minio
+            dockerfile: ./docker/minio/Dockerfile
           - service: ui
             context: ./src/Paperless.UI
             dockerfile: ./src/Paperless.UI/dockerfile

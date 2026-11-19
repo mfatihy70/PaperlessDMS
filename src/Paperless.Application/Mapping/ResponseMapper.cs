@@ -19,5 +19,5 @@ internal static partial class ResponseMapper
 
     // Metadata queries omit file bytes and supply HasFile instead; in-memory entities may contain the bytes.
     private static bool HasStoredFile(Document document) =>
-        document.HasFile || document.FileContent is { Length: > 0 };
+        document.HasFile || document.StorageKey is not null || document.FileContent is { Length: > 0 };
 }

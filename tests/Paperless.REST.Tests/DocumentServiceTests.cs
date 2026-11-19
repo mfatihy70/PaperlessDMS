@@ -3,6 +3,7 @@ using Paperless.Application.Abstractions;
 using Paperless.Application.DTOs;
 using Paperless.Application.Exceptions;
 using Paperless.Application.Services;
+using Paperless.Application.Storage;
 using Paperless.Domain.Entities;
 using Xunit;
 
@@ -12,13 +13,23 @@ public class DocumentServiceTests
 {
     private readonly Mock<IDocumentRepository> _documents = new();
     private readonly Mock<IRepository<DocumentCategory>> _categories = new();
+    private readonly Mock<IFileStorage> _storage = new();
+    private const string StoredKey = "documents/11111111111111111111111111111111";
     private readonly DocumentService _service;
 
     public DocumentServiceTests()
     {
         _categories.Setup(x => x.GetByIdAsync(It.IsAny<int>()))
             .ReturnsAsync((int id) => new DocumentCategory { Id = id, Name = "Category" });
-        _service = new DocumentService(_documents.Object, _categories.Object);
+        byte[] storedBytes = [];
+        _documents.Setup(x => x.BeginFileUploadAsync(It.IsAny<CancellationToken>())).ReturnsAsync(StoredKey);
+        _documents.Setup(x => x.SaveFileChangesAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        _storage.Setup(x => x.WriteAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback<string, byte[], string, CancellationToken>((_, bytes, _, _) => storedBytes = bytes)
+            .Returns(Task.CompletedTask);
+        _storage.Setup(x => x.ReadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(() => storedBytes);
+        _service = new DocumentService(_documents.Object, _categories.Object, _storage.Object);
     }
 
     [Fact]
@@ -53,7 +64,7 @@ public class DocumentServiceTests
     }
 
     [Fact]
-    public async Task CreateDocumentAsync_StoresOriginalBytesAndDerivesMetadata()
+    public async Task CreateDocumentAsync_StoresVerifiedOriginalAndDerivesMetadata()
     {
         var bytes = new byte[] { 0x50, 0x4b, 0x03, 0x04, 0xff };
         var file = CreateFile(bytes, @"C:\upload\report.odt", "application/vnd.oasis.opendocument.text");
@@ -63,7 +74,6 @@ public class DocumentServiceTests
             .Returns(Task.CompletedTask);
         _documents.Setup(x => x.GetByIdWithCategoryAsync(10))
             .ReturnsAsync(() => saved);
-        _documents.Setup(x => x.SaveChangesAsync()).ReturnsAsync(1);
 
         var before = DateTime.UtcNow;
         var result = await _service.CreateDocumentAsync(file, 5, CancellationToken.None);
@@ -74,12 +84,14 @@ public class DocumentServiceTests
         Assert.Equal("report.odt", saved.FileName);
         Assert.Equal("application/vnd.oasis.opendocument.text", saved.ContentType);
         Assert.Equal(bytes.Length, saved.FileSizeBytes);
-        Assert.Equal(bytes, saved.FileContent);
+        Assert.Null(saved.FileContent);
+        Assert.Equal(StoredKey, saved.StorageKey);
+        Assert.Equal(FileIntegrity.Sha256(bytes), saved.FileSha256);
         Assert.Equal(5, saved.CategoryId);
         Assert.InRange(saved.CreatedAt, before, after);
         Assert.True(result.HasFile);
         Assert.Equal(5, result.CategoryId);
-        _documents.Verify(x => x.SaveChangesAsync(), Times.Once);
+        _documents.Verify(x => x.SaveFileChangesAsync(StoredKey, null, CancellationToken.None), Times.Once);
     }
 
     [Fact]
@@ -91,7 +103,7 @@ public class DocumentServiceTests
             _service.CreateDocumentAsync(file, null, CancellationToken.None));
 
         _documents.Verify(x => x.AddAsync(It.IsAny<Document>()), Times.Never);
-        _documents.Verify(x => x.SaveChangesAsync(), Times.Never);
+        _documents.Verify(x => x.SaveFileChangesAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -155,7 +167,6 @@ public class DocumentServiceTests
         };
         var replacement = CreateFile([4, 5, 6], "new.md", "text/markdown");
         _documents.Setup(x => x.GetByIdAsync(12)).ReturnsAsync(existing);
-        _documents.Setup(x => x.SaveChangesAsync()).ReturnsAsync(1);
 
         var result = await _service.UpdateDocumentAsync(12, replacement, 7, CancellationToken.None);
 
@@ -164,10 +175,12 @@ public class DocumentServiceTests
         Assert.Equal("new.md", existing.FileName);
         Assert.Equal("text/markdown", existing.ContentType);
         Assert.Equal(3, existing.FileSizeBytes);
-        Assert.Equal(new byte[] { 4, 5, 6 }, existing.FileContent);
+        Assert.Null(existing.FileContent);
+        Assert.Equal(StoredKey, existing.StorageKey);
+        Assert.Equal(FileIntegrity.Sha256([4, 5, 6]), existing.FileSha256);
         Assert.Equal(7, existing.CategoryId);
         _documents.Verify(x => x.Update(existing), Times.Once);
-        _documents.Verify(x => x.SaveChangesAsync(), Times.Once);
+        _documents.Verify(x => x.SaveFileChangesAsync(StoredKey, null, CancellationToken.None), Times.Once);
     }
 
     [Fact]
@@ -183,7 +196,6 @@ public class DocumentServiceTests
             CategoryId = 1
         };
         _documents.Setup(x => x.GetByIdAsync(12)).ReturnsAsync(existing);
-        _documents.Setup(x => x.SaveChangesAsync()).ReturnsAsync(1);
 
         var result = await _service.UpdateDocumentAsync(12, null, 2, CancellationToken.None);
 
@@ -201,7 +213,7 @@ public class DocumentServiceTests
 
         Assert.False(await _service.UpdateDocumentAsync(404, null, null, CancellationToken.None));
         _documents.Verify(x => x.Update(It.IsAny<Document>()), Times.Never);
-        _documents.Verify(x => x.SaveChangesAsync(), Times.Never);
+        _documents.Verify(x => x.SaveFileChangesAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -209,11 +221,10 @@ public class DocumentServiceTests
     {
         var existing = new Document { Id = 13, Title = "Delete me", FileContent = [1] };
         _documents.Setup(x => x.GetByIdAsync(13)).ReturnsAsync(existing);
-        _documents.Setup(x => x.SaveChangesAsync()).ReturnsAsync(1);
 
         Assert.True(await _service.DeleteDocumentAsync(13));
         _documents.Verify(x => x.Delete(existing), Times.Once);
-        _documents.Verify(x => x.SaveChangesAsync(), Times.Once);
+        _documents.Verify(x => x.SaveFileChangesAsync(null, null, CancellationToken.None), Times.Once);
     }
 
     [Fact]
@@ -223,7 +234,7 @@ public class DocumentServiceTests
 
         Assert.False(await _service.DeleteDocumentAsync(404));
         _documents.Verify(x => x.Delete(It.IsAny<Document>()), Times.Never);
-        _documents.Verify(x => x.SaveChangesAsync(), Times.Never);
+        _documents.Verify(x => x.SaveFileChangesAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static DocumentUpload CreateFile(byte[] bytes, string fileName, string contentType)

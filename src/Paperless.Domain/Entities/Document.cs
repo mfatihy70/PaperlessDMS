@@ -12,6 +12,11 @@ public class Document
     /// <summary>Original uploaded file bytes. Null for legacy records without an upload.</summary>
     public byte[]? FileContent { get; set; }
 
+    /// <summary>Immutable object key of the original in object storage; null for legacy records.</summary>
+    public string? StorageKey { get; set; }
+    public string? FileSha256 { get; set; }
+    public uint Version { get; set; }
+
     public bool HasFile { get; set; }
 
     // Foreign Key to Additional Entity
