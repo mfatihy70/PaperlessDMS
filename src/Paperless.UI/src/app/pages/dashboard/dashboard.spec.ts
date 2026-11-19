@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { of, throwError } from 'rxjs';
+import { of, throwError, Subject } from 'rxjs';
 import { Dashboard } from './dashboard';
 import { DocumentService, DocumentItem, CategoryItem } from '../../services/document.service';
 
@@ -123,6 +123,42 @@ describe('Dashboard Page', () => {
 
     expect(docServiceSpy.deleteCategory).toHaveBeenCalledWith(2);
     expect(component.selectedCatId()).toBeNull();
+  });
+
+  it('should close category edit after successful update', () => {
+    const request = new Subject<void>();
+    docServiceSpy.updateCategory.mockReturnValue(request);
+    fixture.detectChanges();
+
+    component.catFormRef()?.startEdit(mockCats[0]);
+    component.handleEditCategory({
+      id: 1,
+      data: { name: 'New Billing', description: 'Bills' },
+    });
+
+    expect(component.catFormRef()?.editingId).toBe(1);
+    expect(component.isSavingCat()).toBe(true);
+
+    request.next();
+    request.complete();
+
+    expect(component.catFormRef()?.editingId).toBeNull();
+    expect(component.isSavingCat()).toBe(false);
+  });
+
+  it('should keep category edit open when update fails', () => {
+    docServiceSpy.updateCategory.mockReturnValue(throwError(() => new Error('Update failed')));
+    fixture.detectChanges();
+
+    component.catFormRef()?.startEdit(mockCats[0]);
+    component.handleEditCategory({
+      id: 1,
+      data: { name: 'New Billing', description: 'Bills' },
+    });
+
+    expect(component.catFormRef()?.editingId).toBe(1);
+    expect(component.isSavingCat()).toBe(false);
+    expect(component.errorMessage()).toContain('Category update failed');
   });
 
   it('should show error banner when service load fails', () => {

@@ -15,6 +15,10 @@
         @if (form.get('name')?.touched && form.get('name')?.invalid) {
           <div class="text-danger small mt-1">Name required (2-50 chars).</div>
         }
+
+        @if (editForm.get('name')?.touched && editForm.get('name')?.invalid) {
+          <div class="text-danger small mb-1">Name required (1-100 chars, not only spaces).</div>
+        }
       </div>
 
       <div class="mb-2">
@@ -57,7 +61,7 @@
                 <button
                   type="submit"
                   class="btn btn-primary btn-sm py-0 px-2"
-                  [disabled]="editForm.invalid"
+                  [disabled]="editForm.invalid || isSaving()"
                 >
                   Save
                 </button>
@@ -65,6 +69,7 @@
                   type="button"
                   class="btn btn-secondary btn-sm py-0 px-2"
                   (click)="cancelEdit()"
+                  [disabled]="isSaving()"
                 >
                   Cancel
                 </button>

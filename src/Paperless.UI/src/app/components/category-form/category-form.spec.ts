@@ -68,7 +68,7 @@ describe('CategoryForm', () => {
       id: 1,
       data: { name: 'Legal & Compliance', description: 'Updated' },
     });
-    expect(component.editingId).toBeNull();
+    expect(component.editingId).toBe(1);
   });
 
   it('should emit deleteCategory when user confirms prompt', () => {

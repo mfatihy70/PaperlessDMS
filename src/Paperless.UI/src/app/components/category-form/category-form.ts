@@ -29,12 +29,12 @@ export class CategoryForm implements OnInit {
 
   ngOnInit(): void {
     this.form = this.fb.group({
-      name: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(50)]],
+      name: ['', [Validators.required, Validators.maxLength(100), Validators.pattern(/\S/)]],
       description: ['', [Validators.maxLength(200)]],
     });
 
     this.editForm = this.fb.group({
-      name: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(50)]],
+      name: ['', [Validators.required, Validators.maxLength(100), Validators.pattern(/\S/)]],
       description: ['', [Validators.maxLength(200)]],
     });
   }
@@ -60,12 +60,14 @@ export class CategoryForm implements OnInit {
   }
 
   submitEdit(id: number): void {
+    if (this.isSaving()) return;
+
     if (this.editForm.invalid) {
       this.editForm.markAllAsTouched();
       return;
     }
+
     this.editCategory.emit({ id, data: this.editForm.value });
-    this.editingId = null;
   }
 
   onDelete(id: number): void {
