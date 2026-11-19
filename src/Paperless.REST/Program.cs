@@ -31,8 +31,8 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "Paperless REST API",
         Version = "v1",
-        Description = "Manage uploaded documents, categories and asynchronous original preparation. OCR, " +
-                      "AI summaries and full-text search are not implemented yet."
+        Description = "Manage uploaded documents, categories and asynchronous OCR for PDF, PNG and JPEG originals. " +
+                      "Read processing status and persisted recognized text. AI summaries and full-text search are not implemented yet."
     });
     options.IncludeXmlComments(
         Path.Combine(AppContext.BaseDirectory, "Paperless.REST.xml"),

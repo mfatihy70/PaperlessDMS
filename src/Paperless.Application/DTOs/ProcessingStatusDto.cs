@@ -1,13 +1,13 @@
 namespace Paperless.Application.DTOs;
 
-/// <summary>The current original's preparation status. ReadyForOcr means the stored original was verified; OCR has not run.</summary>
+/// <summary>The current original's background status. OcrCompleted means its recognized text is saved and available.</summary>
 public class ProcessingStatusDto
 {
     /// <summary>The document ID.</summary>
     public int DocumentId { get; set; }
     /// <summary>The current file generation's processing ID; null when no job exists.</summary>
     public Guid? JobId { get; set; }
-    /// <summary>Queued, Processing, RetryScheduled, ReadyForOcr or Failed. Without a job: NoOriginal, RequiresMigration or NotQueued.</summary>
+    /// <summary>Queued, Processing (original verification), RecognizingText, RetryScheduled, OcrCompleted or Failed. ReadyForOcr is a legacy preparation state. Without a job: NoOriginal, RequiresMigration or NotQueued.</summary>
     public string State { get; set; } = string.Empty;
     /// <summary>Worker attempts for this job, including recovered attempts after a crash.</summary>
     public int Attempts { get; set; }
@@ -17,7 +17,7 @@ public class ProcessingStatusDto
     public DateTime? UpdatedAt { get; set; }
     /// <summary>When the latest worker attempt started, in UTC.</summary>
     public DateTime? StartedAt { get; set; }
-    /// <summary>When preparation succeeded or finally failed, in UTC.</summary>
+    /// <summary>When OCR succeeded or processing finally failed, in UTC.</summary>
     public DateTime? FinishedAt { get; set; }
     /// <summary>The earliest scheduled retry time, in UTC.</summary>
     public DateTime? NextAttemptAt { get; set; }

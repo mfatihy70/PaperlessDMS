@@ -13,6 +13,8 @@ internal static class ProcessingScheduler
     // Caller owns a transaction and has already locked/saved the document row.
     internal static async Task ScheduleAsync(PaperlessDbContext context, Document document, CancellationToken cancellationToken)
     {
+        // Invalidate the former original's result in the same transaction as replacement/retry.
+        await context.DocumentTexts.Where(text => text.DocumentId == document.Id).ExecuteDeleteAsync(cancellationToken);
         var job = await context.ProcessingJobs.SingleOrDefaultAsync(j => j.DocumentId == document.Id, cancellationToken);
         if (job is null)
         {

@@ -8,6 +8,7 @@ using Paperless.Infrastructure.Processing;
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddInfrastructure(builder.Configuration.GetConnectionString("DefaultConnection"), builder.Configuration, runFileCleanup: false);
 builder.Services.AddDocumentProcessing(builder.Configuration, dispatchOutbox: false);
+builder.Services.AddOcrWorker(builder.Configuration);
 builder.Services.AddHostedService<PreparationWorker>();
 using var host = builder.Build();
 await using (var scope = host.Services.CreateAsyncScope())

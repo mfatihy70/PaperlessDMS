@@ -6,6 +6,7 @@ using Minio;
 using Paperless.Application.Abstractions;
 using Paperless.Domain.Entities;
 using Paperless.Infrastructure.Persistence;
+using Paperless.Infrastructure.Ocr;
 using Paperless.Infrastructure.Processing;
 using Paperless.Infrastructure.Repositories;
 using Paperless.Infrastructure.Storage;
@@ -61,12 +62,34 @@ public static class DependencyInjection
                 "Processing:LeaseSeconds must exceed the MinIO timeout by at least 30 seconds.")
             .ValidateOnStart();
         services.AddScoped<IProcessingRepository, ProcessingRepository>();
-        services.AddScoped<Paperless.Application.Services.DocumentPreparation>();
         if (dispatchOutbox)
         {
             services.AddSingleton<OutboxRepository>();
             services.AddHostedService<OutboxPublisher>();
         }
+        return services;
+    }
+
+    public static IServiceCollection AddOcrWorker(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<OcrOptions>().Bind(configuration.GetSection("Ocr"))
+            .Validate(o => o.Languages is { Length: > 0 and <= 64 } &&
+                System.Text.RegularExpressions.Regex.IsMatch(o.Languages, "^[a-z]{3}(\\+[a-z]{3})*$"),
+                "Ocr:Languages must contain installed language codes such as deu+eng.")
+            .Validate(o => new[] { o.TesseractPath, o.PdfInfoPath, o.PdfToPpmPath }
+                .All(path => !string.IsNullOrWhiteSpace(path) && !path.Any(char.IsControl)), "OCR tool paths are required.")
+            .Validate(o => o.TimeoutSeconds is >= 1 and <= 300 && o.MaxPages is >= 1 and <= 100 &&
+                o.MaxTextCharacters is >= 1 and <= 1_000_000 && o.RenderDimension is >= 1000 and <= 6000 &&
+                o.MaxImagePixels is >= 1_000_000 and <= 50_000_000 && (long)o.RenderDimension * o.RenderDimension <= o.MaxImagePixels,
+                "Invalid OCR timeout, page, text or image limits.")
+            .Validate<IOptions<ProcessingOptions>, IOptions<MinioStorageOptions>>((o, processing, storage) =>
+                processing.Value.LeaseSeconds >= storage.Value.TimeoutSeconds + o.TimeoutSeconds + 30,
+                "Processing:LeaseSeconds must cover the MinIO timeout, OCR timeout and at least 30 seconds for saving results.")
+            .ValidateOnStart();
+        services.AddSingleton<TesseractOcrEngine>();
+        services.AddSingleton<IOcrEngine>(provider => provider.GetRequiredService<TesseractOcrEngine>());
+        services.AddScoped<Paperless.Application.Services.DocumentPreparation>();
+        services.AddHostedService<OcrRuntimeCheck>();
         return services;
     }
 }

@@ -23,7 +23,7 @@ public sealed class PreparationWorker(IServiceScopeFactory scopes, IOptions<Proc
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception exception)
             {
-                logger.LogWarning(exception, "Preparation consumer disconnected; reconnecting.");
+                logger.LogWarning(exception, "Document processing consumer disconnected; reconnecting.");
             }
             try { await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken); }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
@@ -49,7 +49,7 @@ public sealed class PreparationWorker(IServiceScopeFactory scopes, IOptions<Proc
                 if (message is null)
                 {
                     await channel.BasicRejectAsync(delivery.DeliveryTag, requeue: false, lifetime.Token);
-                    logger.LogWarning("An invalid preparation message was rejected to the dead-letter queue.");
+                    logger.LogWarning("An invalid processing message was rejected to the dead-letter queue.");
                     return;
                 }
                 while (!lifetime.IsCancellationRequested)
@@ -60,14 +60,14 @@ public sealed class PreparationWorker(IServiceScopeFactory scopes, IOptions<Proc
                         if (await scope.ServiceProvider.GetRequiredService<DocumentPreparation>().TryProcessAsync(message, lifetime.Token))
                         {
                             await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, lifetime.Token);
-                            logger.LogInformation("Preparation delivery completed for document {DocumentId}, job {JobId}.", message.DocumentId, message.JobId);
+                            logger.LogInformation("Processing delivery completed for document {DocumentId}, job {JobId}.", message.DocumentId, message.JobId);
                             return;
                         }
                     }
                     catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { return; }
                     catch (Exception exception)
                     {
-                        logger.LogWarning(exception, "Preparation for document {DocumentId} could not be saved; delivery remains unacknowledged.", message.DocumentId);
+                        logger.LogWarning(exception, "Processing for document {DocumentId} could not be saved; delivery remains unacknowledged.", message.DocumentId);
                     }
                     await Task.Delay(TimeSpan.FromSeconds(2), lifetime.Token);
                 }
@@ -75,13 +75,13 @@ public sealed class PreparationWorker(IServiceScopeFactory scopes, IOptions<Proc
             catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
             catch (Exception exception)
             {
-                logger.LogWarning(exception, "Preparation delivery was interrupted; the broker will redeliver it.");
+                logger.LogWarning(exception, "Processing delivery was interrupted; the broker will redeliver it.");
                 lifetime.Cancel();
                 disconnected.TrySetResult();
             }
         };
         await channel.BasicConsumeAsync(RabbitTransport.Queue, autoAck: false, consumer, lifetime.Token);
-        logger.LogInformation("Waiting for document preparation messages.");
+        logger.LogInformation("Waiting for document processing messages.");
         try { await disconnected.Task.WaitAsync(lifetime.Token); }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
     }

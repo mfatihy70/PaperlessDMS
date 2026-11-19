@@ -6,14 +6,17 @@ public interface IDocumentProcessingService
 {
     Task<ProcessingStatusDto?> GetAsync(int documentId, CancellationToken cancellationToken);
     Task<ProcessingStatusDto?> RetryAsync(int documentId, CancellationToken cancellationToken);
+    Task<DocumentTextDto?> GetTextAsync(int documentId, CancellationToken cancellationToken);
 }
 
 public interface IProcessingRepository
 {
     Task<ProcessingStatusDto?> GetAsync(int documentId, CancellationToken cancellationToken);
     Task<ProcessingStatusDto?> RetryAsync(int documentId, CancellationToken cancellationToken);
+    Task<DocumentTextDto?> GetTextAsync(int documentId, CancellationToken cancellationToken);
     Task<PreparationClaimResult> ClaimAsync(PrepareDocumentMessage message, CancellationToken cancellationToken);
-    Task FinishAsync(PreparationClaim claim, string? errorCode, string? error, bool retryable, CancellationToken cancellationToken);
+    Task<bool> StartOcrAsync(PreparationClaim claim, CancellationToken cancellationToken);
+    Task FinishAsync(PreparationClaim claim, OcrExtraction? extraction, string? errorCode, string? error, bool retryable, CancellationToken cancellationToken);
 }
 
 // Messages carry immutable object references, never original file bytes.

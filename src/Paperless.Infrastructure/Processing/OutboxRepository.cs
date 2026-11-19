@@ -16,8 +16,8 @@ internal sealed class OutboxRepository(IDbContextFactory<PaperlessDbContext> fac
         await context.ProcessingOutbox.Where(m => !m.IsDeadLetter && m.PublishedAt != null &&
             (m.PublishLeaseUntil == null || m.PublishLeaseUntil < now) && context.ProcessingJobs.Any(j =>
                 j.CurrentMessageId == m.Id &&
-                ((j.State == ProcessingState.Processing && j.LeaseUntil < now) ||
-                 ((j.State == ProcessingState.Queued || j.State == ProcessingState.RetryScheduled) && m.PublishedAt < cutoff))))
+                (((j.State == ProcessingState.Processing || j.State == ProcessingState.RecognizingText) && j.LeaseUntil < now) ||
+                 ((j.State == ProcessingState.Queued || j.State == ProcessingState.RetryScheduled || j.State == ProcessingState.ReadyForOcr) && m.PublishedAt < cutoff))))
             .ExecuteUpdateAsync(set => set.SetProperty(m => m.PublishedAt, (DateTime?)null)
                 .SetProperty(m => m.AvailableAt, now), cancellationToken);
         await context.ProcessingOutbox.Where(m => !m.IsDeadLetter && !context.ProcessingJobs.Any(j => j.CurrentMessageId == m.Id) &&
