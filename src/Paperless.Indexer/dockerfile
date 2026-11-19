@@ -1,0 +1,18 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY src/Paperless.Domain/Paperless.Domain.csproj src/Paperless.Domain/
+COPY src/Paperless.Application/Paperless.Application.csproj src/Paperless.Application/
+COPY src/Paperless.Infrastructure/Paperless.Infrastructure.csproj src/Paperless.Infrastructure/
+COPY src/Paperless.Indexer/Paperless.Indexer.csproj src/Paperless.Indexer/
+RUN dotnet restore src/Paperless.Indexer/Paperless.Indexer.csproj
+COPY src/Paperless.Domain/ src/Paperless.Domain/
+COPY src/Paperless.Application/ src/Paperless.Application/
+COPY src/Paperless.Infrastructure/ src/Paperless.Infrastructure/
+COPY src/Paperless.Indexer/ src/Paperless.Indexer/
+RUN dotnet publish src/Paperless.Indexer/Paperless.Indexer.csproj -c Release --no-restore -o /app/publish
+
+FROM mcr.microsoft.com/dotnet/runtime:10.0
+WORKDIR /app
+COPY --from=build /app/publish .
+USER $APP_UID
+ENTRYPOINT ["dotnet", "Paperless.Indexer.dll"]
