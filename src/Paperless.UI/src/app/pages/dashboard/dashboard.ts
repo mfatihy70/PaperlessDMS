@@ -119,12 +119,22 @@ export class Dashboard implements OnInit {
   }
 
   handleEditCategory(event: { id: number; data: UpdateCategoryDto }): void {
+    if (this.isSavingCat()) return;
+
+    this.isSavingCat.set(true);
+    this.errorMessage.set('');
+
     this.api.updateCategory(event.id, event.data).subscribe({
       next: () => {
+        this.catFormRef()?.cancelEdit();
+        this.isSavingCat.set(false);
         this.showSuccess('Category updated!');
         this.loadData();
       },
-      error: (err) => this.errorMessage.set('Category update failed: ' + err.message),
+      error: (err) => {
+        this.errorMessage.set('Category update failed: ' + err.message);
+        this.isSavingCat.set(false);
+      },
     });
   }
 
