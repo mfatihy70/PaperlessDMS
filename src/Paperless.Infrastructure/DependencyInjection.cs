@@ -11,6 +11,7 @@ using Paperless.Infrastructure.Processing;
 using Paperless.Infrastructure.Repositories;
 using Paperless.Infrastructure.Storage;
 using Paperless.Infrastructure.Search;
+using Paperless.Infrastructure.Summarization;
 
 namespace Paperless.Infrastructure;
 
@@ -43,6 +44,7 @@ public static class DependencyInjection
         if (runFileCleanup) services.AddHostedService(provider => provider.GetRequiredService<FileCleanupWorker>());
         services.AddScoped<FileMigrationService>();
         services.AddScoped<IDocumentRepository, DocumentRepository>();
+        services.AddScoped<ITagRepository, TagRepository>();
         services.AddScoped<IRepository<DocumentCategory>, Repository<DocumentCategory>>();
         return services;
     }
@@ -77,6 +79,7 @@ public static class DependencyInjection
         {
             services.AddSingleton<IOutboxStore, OutboxRepository>();
             services.AddSingleton<IOutboxStore, SearchOutboxRepository>();
+            services.AddSingleton<IOutboxStore, SummaryOutboxRepository>();
             services.AddHostedService<OutboxPublisher>();
         }
         return services;
@@ -105,6 +108,38 @@ public static class DependencyInjection
         });
         services.AddScoped<ISearchRepository, SearchRepository>();
         services.AddScoped<Paperless.Application.Services.DocumentIndexing>();
+        return services;
+    }
+
+    public static IServiceCollection AddDocumentSummaries(this IServiceCollection services)
+    {
+        services.AddScoped<ISummaryRepository, SummaryRepository>();
+        return services;
+    }
+
+    public static IServiceCollection AddGenAiWorker(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<GenAiOptions>().Bind(configuration.GetSection("GenAi"))
+            .Validate(o => Uri.TryCreate(o.Endpoint, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == "https" || o.AllowInsecureEndpoint && uri.Scheme == "http") &&
+                uri.UserInfo.Length == 0 && uri.AbsolutePath == "/" && uri.Query.Length == 0 && uri.Fragment.Length == 0,
+                "GenAi:Endpoint must be an HTTPS service root. HTTP is reserved for explicitly configured local fixtures.")
+            .Validate(o => o.Model is not null && System.Text.RegularExpressions.Regex.IsMatch(o.Model, "^gemini-[a-z0-9.-]{1,100}$") &&
+                o.Language is not null && System.Text.RegularExpressions.Regex.IsMatch(o.Language, "^[a-z]{2,3}(-[A-Za-z]{2,8})?$"),
+                "GenAI requires a Gemini model ID and a language code.")
+            .Validate(o => !o.Enabled || !string.IsNullOrWhiteSpace(o.ApiKey) && o.ApiKey.Length <= 256 && !o.ApiKey.Any(char.IsWhiteSpace) && !o.ApiKey.Any(char.IsControl),
+                "Set a valid GenAi:ApiKey locally before enabling the GenAI worker.")
+            .Validate<IOptions<ProcessingOptions>>((o, processing) => o.TimeoutSeconds is >= 1 and <= 180 &&
+                o.MaxInputCharacters is >= 1 and <= 1_000_000 && processing.Value.LeaseSeconds >= o.TimeoutSeconds + 30,
+                "GenAI input limit must be 1..1000000; timeout 1..180 seconds; processing lease must cover timeout plus 30 seconds.")
+            .ValidateOnStart();
+        services.AddHttpClient<ISummaryGenerator, GeminiSummaryGenerator>((provider, client) =>
+        {
+            client.BaseAddress = new Uri(provider.GetRequiredService<IOptions<GenAiOptions>>().Value.Endpoint.TrimEnd('/') + "/");
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false }).RemoveAllLoggers();
+        services.AddScoped<Paperless.Application.Services.DocumentSummarization>();
+        if (configuration.GetValue<bool>("GenAi:Enabled")) services.AddHostedService<SummaryWorker>();
         return services;
     }
 

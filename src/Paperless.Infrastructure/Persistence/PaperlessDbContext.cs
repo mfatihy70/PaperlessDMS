@@ -3,6 +3,7 @@ using Paperless.Application.Exceptions;
 using Paperless.Domain.Entities;
 using Paperless.Infrastructure.Processing;
 using Paperless.Infrastructure.Search;
+using Paperless.Infrastructure.Summarization;
 
 namespace Paperless.Infrastructure.Persistence;
 
@@ -19,6 +20,11 @@ public class PaperlessDbContext : DbContext
     public DbSet<SearchIndexJob> SearchIndexJobs => Set<SearchIndexJob>();
     public DbSet<SearchOutboxMessage> SearchOutbox => Set<SearchOutboxMessage>();
     public DbSet<SearchIndexCatalog> SearchIndexCatalog => Set<SearchIndexCatalog>();
+    public DbSet<SummaryJob> SummaryJobs => Set<SummaryJob>();
+    public DbSet<DocumentSummary> DocumentSummaries => Set<DocumentSummary>();
+    public DbSet<SummaryOutboxMessage> SummaryOutbox => Set<SummaryOutboxMessage>();
+    public DbSet<Tag> Tags => Set<Tag>();
+    public DbSet<DocumentTag> DocumentTags => Set<DocumentTag>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -108,6 +114,46 @@ public class PaperlessDbContext : DbContext
             entity.HasKey(catalog => catalog.Id);
             entity.Property(catalog => catalog.Id).ValueGeneratedNever();
             entity.Property(catalog => catalog.Identity).HasMaxLength(255);
+        });
+        modelBuilder.Entity<SummaryJob>(entity =>
+        {
+            entity.HasKey(job => job.DocumentId);
+            entity.HasOne<Document>().WithOne().HasForeignKey<SummaryJob>(job => job.DocumentId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(job => job.JobId).IsUnique();
+            entity.Property(job => job.State).HasConversion<string>().HasMaxLength(32);
+            entity.Property(job => job.LastErrorCode).HasMaxLength(64);
+            entity.Property(job => job.LastError).HasMaxLength(512);
+        });
+        modelBuilder.Entity<DocumentSummary>(entity =>
+        {
+            entity.HasKey(summary => summary.DocumentId);
+            entity.HasOne<SummaryJob>().WithOne().HasForeignKey<DocumentSummary>(summary => summary.DocumentId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(summary => summary.Text).HasMaxLength(4000);
+            entity.Property(summary => summary.Language).HasMaxLength(32);
+            entity.Property(summary => summary.Provider).HasMaxLength(32);
+            entity.Property(summary => summary.Model).HasMaxLength(128);
+        });
+        modelBuilder.Entity<SummaryOutboxMessage>(entity =>
+        {
+            entity.HasKey(message => message.Id);
+            entity.HasOne<SummaryJob>().WithMany().HasForeignKey(message => message.DocumentId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(message => message.Payload).HasMaxLength(8192);
+            entity.Property(message => message.LastError).HasMaxLength(512);
+            entity.HasIndex(message => new { message.PublishedAt, message.AvailableAt });
+        });
+        modelBuilder.Entity<Tag>(entity =>
+        {
+            entity.HasKey(tag => tag.Id);
+            entity.Property(tag => tag.Name).HasMaxLength(100);
+            entity.Property(tag => tag.NormalizedName).HasMaxLength(100);
+            entity.Property(tag => tag.Description).HasMaxLength(1000);
+            entity.HasIndex(tag => tag.NormalizedName).IsUnique();
+        });
+        modelBuilder.Entity<DocumentTag>(entity =>
+        {
+            entity.HasKey(tag => new { tag.DocumentId, tag.TagId });
+            entity.HasOne<Document>().WithMany().HasForeignKey(tag => tag.DocumentId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Tag>().WithMany().HasForeignKey(tag => tag.TagId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 

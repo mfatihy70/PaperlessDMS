@@ -7,3 +7,7 @@
 **/dist
 tests
 tmp
+*.env
+.env.*
+**/secrets.json
+**/appsettings.Development.json

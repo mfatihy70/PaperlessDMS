@@ -6,6 +6,8 @@ Thumbs.db
 *.swp
 *.env
 *.env.local
+.env.*
+!.env.example
 
 # ==============================================================================
 # IDEs & Editors (VS Code / JetBrains / Visual Studio)

@@ -7,6 +7,7 @@ using Paperless.Application.Exceptions;
 using Paperless.Domain.Entities;
 using Paperless.Infrastructure.Persistence;
 using Paperless.Infrastructure.Search;
+using Paperless.Infrastructure.Summarization;
 
 namespace Paperless.Infrastructure.Processing;
 
@@ -160,7 +161,10 @@ public sealed class ProcessingRepository(IDbContextFactory<PaperlessDbContext> f
         }
         await context.SaveChangesAsync(cancellationToken);
         if (job.State == ProcessingState.OcrCompleted)
+        {
             await SearchIndexScheduler.QueueAsync(context, job.DocumentId, cancellationToken);
+            await SummaryScheduler.QueueAsync(context, job.DocumentId, job.JobId, cancellationToken);
+        }
         await transaction.CommitAsync(cancellationToken);
         if (job.State == ProcessingState.OcrCompleted)
             logger.LogInformation("OCR result saved for document {DocumentId}, job {JobId} ({PageCount} pages).", job.DocumentId, job.JobId, extraction!.PageCount);
