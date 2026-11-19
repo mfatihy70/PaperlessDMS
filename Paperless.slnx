@@ -5,6 +5,7 @@
     <Project Path="src/Paperless.Infrastructure/Paperless.Infrastructure.csproj" />
     <Project Path="src/Paperless.REST/Paperless.REST.csproj" />
     <Project Path="src/Paperless.Worker/Paperless.Worker.csproj" />
+    <Project Path="src/Paperless.Indexer/Paperless.Indexer.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Paperless.REST.Tests/Paperless.REST.Tests.csproj" />

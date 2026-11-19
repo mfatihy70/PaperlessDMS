@@ -82,6 +82,9 @@ jobs:
           - service: worker
             context: .
             dockerfile: ./src/Paperless.Worker/dockerfile
+          - service: indexer
+            context: .
+            dockerfile: ./src/Paperless.Indexer/dockerfile
           - service: minio
             context: ./docker/minio
             dockerfile: ./docker/minio/Dockerfile

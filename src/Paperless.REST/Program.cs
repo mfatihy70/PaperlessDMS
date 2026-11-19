@@ -22,17 +22,19 @@ builder.Services.AddControllers(options =>
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApplicationValidationExceptionHandler>();
 builder.Services.AddExceptionHandler<FileStorageExceptionHandler>();
+builder.Services.AddExceptionHandler<SearchExceptionHandler>();
 
 // 2. Add Swagger / OpenAPI
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
+    options.UseAllOfToExtendReferenceSchemas();
     options.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "Paperless REST API",
         Version = "v1",
         Description = "Manage uploaded documents, categories and asynchronous OCR for PDF, PNG and JPEG originals. " +
-                      "Read processing status and persisted recognized text. AI summaries and full-text search are not implemented yet."
+                      "Read processing status and recognized text, and search with optional spelling tolerance. AI summaries and tagging are not implemented yet."
     });
     options.IncludeXmlComments(
         Path.Combine(AppContext.BaseDirectory, "Paperless.REST.xml"),
@@ -44,11 +46,13 @@ builder.Services.AddSwaggerGen(options =>
 var connString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddInfrastructure(connString, builder.Configuration);
 builder.Services.AddDocumentProcessing(builder.Configuration, dispatchOutbox: true);
+builder.Services.AddDocumentSearch(builder.Configuration);
 
 // 4. DI Registrations
 builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<IDocumentProcessingService, DocumentProcessingService>();
+builder.Services.AddScoped<IDocumentSearchService, DocumentSearchService>();
 
 var app = builder.Build();
 

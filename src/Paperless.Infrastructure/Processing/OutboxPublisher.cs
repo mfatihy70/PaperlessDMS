@@ -6,7 +6,7 @@ using RabbitMQ.Client;
 
 namespace Paperless.Infrastructure.Processing;
 
-internal sealed class OutboxPublisher(OutboxRepository repository, IOptions<ProcessingOptions> options, ILogger<OutboxPublisher> logger) : BackgroundService
+internal sealed class OutboxPublisher(IEnumerable<IOutboxStore> repositories, IOptions<ProcessingOptions> options, ILogger<OutboxPublisher> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -19,47 +19,49 @@ internal sealed class OutboxPublisher(OutboxRepository repository, IOptions<Proc
             {
                 try
                 {
-                    await repository.RecoverAsync(stoppingToken);
-                    for (var count = 0; count < 25 && !stoppingToken.IsCancellationRequested; count++)
+                    foreach (var repository in repositories)
                     {
-                        var message = await repository.ClaimAsync(stoppingToken);
-                        if (message is null) break;
-                        var published = false;
-                        try
+                        await repository.RecoverAsync(stoppingToken);
+                        for (var count = 0; count < 25 && !stoppingToken.IsCancellationRequested; count++)
                         {
-                            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-                            timeout.CancelAfter(TimeSpan.FromSeconds(options.Value.BrokerTimeoutSeconds));
-                            if (connection is null || !connection.IsOpen || channel is null || !channel.IsOpen)
+                            var message = await repository.ClaimAsync(stoppingToken);
+                            if (message is null) break;
+                            var published = false;
+                            try
                             {
+                                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                                timeout.CancelAfter(TimeSpan.FromSeconds(options.Value.BrokerTimeoutSeconds));
+                                if (connection is null || !connection.IsOpen || channel is null || !channel.IsOpen)
+                                {
+                                    if (channel is not null) await channel.DisposeAsync();
+                                    if (connection is not null) await connection.DisposeAsync();
+                                    connection = await RabbitTransport.ConnectAsync(options.Value, "paperless-outbox", timeout.Token);
+                                    channel = await connection.CreateChannelAsync(new CreateChannelOptions(true, true), timeout.Token);
+                                    await RabbitTransport.DeclareAsync(channel, timeout.Token);
+                                }
+                                var properties = new BasicProperties
+                                {
+                                    Persistent = true,
+                                    ContentType = "application/json",
+                                    Type = message.MessageType,
+                                    MessageId = message.Id.ToString(),
+                                    CorrelationId = message.CorrelationId
+                                };
+                                await channel.BasicPublishAsync(message.Exchange, message.RoutingKey,
+                                    mandatory: true, properties, Encoding.UTF8.GetBytes(message.Payload), timeout.Token);
+                                published = true;
+                            }
+                            catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
+                            {
+                                logger.LogWarning(exception, "RabbitMQ did not confirm outbox message {MessageId}; delivery remains queued.", message.Id);
                                 if (channel is not null) await channel.DisposeAsync();
                                 if (connection is not null) await connection.DisposeAsync();
-                                connection = await RabbitTransport.ConnectAsync(options.Value, "paperless-outbox", timeout.Token);
-                                channel = await connection.CreateChannelAsync(new CreateChannelOptions(true, true), timeout.Token);
-                                await RabbitTransport.DeclareAsync(channel, timeout.Token);
+                                channel = null;
+                                connection = null;
                             }
-                            var properties = new BasicProperties
-                            {
-                                Persistent = true,
-                                ContentType = "application/json",
-                                Type = message.IsDeadLetter ? "preparation-failed.v1" : "prepare-document.v1",
-                                MessageId = message.Id.ToString(),
-                                CorrelationId = message.JobId.ToString()
-                            };
-                            await channel.BasicPublishAsync(message.IsDeadLetter ? RabbitTransport.DeadExchange : RabbitTransport.Exchange,
-                                message.IsDeadLetter ? RabbitTransport.DeadRoutingKey : RabbitTransport.RoutingKey,
-                                mandatory: true, properties, Encoding.UTF8.GetBytes(message.Payload), timeout.Token);
-                            published = true;
+                            await repository.CompleteAsync(message, published, stoppingToken);
+                            if (!published) break; // One broker failure per polling cycle, rather than one per queued document.
                         }
-                        catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
-                        {
-                            logger.LogWarning(exception, "RabbitMQ did not confirm outbox message {MessageId}; delivery remains queued.", message.Id);
-                            if (channel is not null) await channel.DisposeAsync();
-                            if (connection is not null) await connection.DisposeAsync();
-                            channel = null;
-                            connection = null;
-                        }
-                        await repository.CompleteAsync(message, published, stoppingToken);
-                        if (!published) break; // One broker failure per polling cycle, rather than one per queued document.
                     }
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }

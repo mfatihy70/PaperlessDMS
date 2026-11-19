@@ -6,6 +6,7 @@ using Paperless.Domain.Entities;
 using Paperless.Infrastructure.Persistence;
 using Paperless.Infrastructure.Processing;
 using Paperless.Infrastructure.Storage;
+using Paperless.Infrastructure.Search;
 
 namespace Paperless.Infrastructure.Repositories;
 
@@ -36,6 +37,9 @@ public class DocumentRepository : Repository<Document>, IDocumentRepository
 
     public async Task SaveFileChangesAsync(string? uploadedKey, string? retiredKey, CancellationToken cancellationToken)
     {
+        var changedDocuments = _context.ChangeTracker.Entries<Document>()
+            .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            .Select(entry => entry.Entity).ToArray();
         await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
         if (uploadedKey is not null)
         {
@@ -59,6 +63,9 @@ public class DocumentRepository : Repository<Document>, IDocumentRepository
                 ON CONFLICT ("ObjectKey") DO NOTHING;
                 """, cancellationToken);
         }
+        if (uploadedKey is null)
+            foreach (var documentId in changedDocuments.Select(document => document.Id).Distinct().Order())
+                await SearchIndexScheduler.QueueAsync(_context, documentId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 

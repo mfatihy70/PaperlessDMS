@@ -15,6 +15,7 @@ The backend follows Clean Architecture with compile-time dependencies directed t
 | `Paperless.Infrastructure` | EF Core/PostgreSQL, MinIO, RabbitMQ, outbox delivery, file cleanup and operator commands | Application, Domain |
 | `Paperless.REST` | HTTP controllers, request validation, Swagger, exception translation and dependency wiring | Application, Infrastructure |
 | `Paperless.Worker` | Separate RabbitMQ consumer; verifies originals and recognizes text with Tesseract/Poppler | Application, Infrastructure |
+| `Paperless.Indexer` | Separate RabbitMQ consumer; indexes current OCR results and recovers the derived Elasticsearch index | Application, Infrastructure |
 
 ```mermaid
 flowchart LR
@@ -22,6 +23,8 @@ flowchart LR
     REST -->|composition root only| Infrastructure[Paperless.Infrastructure]
     Worker[Paperless.Worker] --> Application
     Worker -->|composition root only| Infrastructure
+    Indexer[Paperless.Indexer] --> Application
+    Indexer -->|composition root only| Infrastructure
     Infrastructure --> Application
     Infrastructure --> Domain[Paperless.Domain]
     Application --> Domain
@@ -31,7 +34,7 @@ flowchart LR
 Controllers depend on application service interfaces; they do not access repositories or EF Core.
 Infrastructure implements repository interfaces declared by Application. Domain has no NuGet dependencies.
 Application uses Mapperly only at build time; neither project depends on ASP.NET Core or EF Core.
-The REST API and the OCR worker run as separate processes. Both use the same application core.
+The REST API, OCR worker and search indexer run as separate processes and use the same application core.
 
 ### Response mapping
 
@@ -74,8 +77,8 @@ Response DTO XML documentation is generated in Application and loaded alongside 
   message to the separate worker. It verifies the original, recognizes PDF/PNG/JPEG text and atomically saves text and status.
   The status and text APIs work independently of Swagger UI.
   See [processing and recovery](docs/processing.md) and [the manual single-PR workflow](docs/processing-git.md).
-  See [the OCR upgrade and API guide](docs/ocr.md). Search, GenAI, tags and the XML access-log batch
-  follow according to [the roadmap](docs/backend-roadmap.md).
+  See [the OCR guide](docs/ocr.md) and [the search upgrade and API guide](docs/search.md).
+  GenAI, tags and the XML access-log batch follow according to [the roadmap](docs/backend-roadmap.md).
 - The REST Docker build context is the repository root so all four backend projects are available. Compose and the
   container-publishing workflow use that context. The root `.dockerignore` excludes local build outputs and unrelated caches.
 
@@ -183,6 +186,10 @@ Restart `npm start` after changing `proxy.conf.json`.
 | GET | `/api/Documents/{id}/processing` | Read verification/OCR status without contacting storage or RabbitMQ | 200 |
 | POST | `/api/Documents/{id}/processing/retry` | Durably schedule a new job after failure or when missing | 202 |
 | GET | `/api/Documents/{id}/text` | Read persisted OCR text for the current original | 200 |
+| GET | `/api/Documents/search` | Ranked full-text search with optional spelling tolerance and pagination | 200 |
+| GET | `/api/Documents/{id}/indexing` | Read independent search-index status | 200 |
+| POST | `/api/Documents/{id}/indexing/retry` | Reschedule failed or missing indexing | 202 |
+| POST | `/api/Documents/search/reindex` | Reschedule the derived index from PostgreSQL without OCR | 202 |
 | GET | `/api/Categories` | List categories | 200 |
 | GET | `/api/Categories/{id}` | Get a category | 200 |
 | POST | `/api/Categories` | Create a category | 201 |
@@ -240,7 +247,9 @@ Request-specific `traceId` values in MVC problem responses help correlate failur
 OCR supports PDF, PNG and JPEG. Recognized text is stored in PostgreSQL and returned by the text endpoint;
 409 means no current result is available. Check the processing endpoint until `OcrCompleted` or `Failed`.
 Other uploaded file types remain downloadable and produce an `UnsupportedDocumentFormat` processing failure.
-AI summaries, tagging, full-text search and the XML access-log batch are not implemented yet.
+Full-text search uses a separate Elasticsearch indexer; search candidates are validated against current PostgreSQL documents.
+See [search setup, consistency and recovery](docs/search.md) and [the single-PR workflow](docs/search-git.md).
+AI summaries, tagging and the XML access-log batch are not implemented yet.
 New controller actions are automatically included in Swagger; add XML comments and `ProducesResponseType`
 attributes to describe them. The OpenAPI document is generated as JSON; no separate OpenAPI YAML is maintained.
 
