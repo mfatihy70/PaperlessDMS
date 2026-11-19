@@ -5,15 +5,16 @@ using Paperless.Application.DTOs;
 
 namespace Paperless.REST.Controllers;
 
-/// <summary>Observe and retry preparation of stored originals, independently of Swagger UI.</summary>
+/// <summary>Observe and retry verification and OCR of stored originals.</summary>
 [ApiController]
 [Route("api/Documents/{id}/processing")]
 public class DocumentProcessingController(IDocumentProcessingService service) : ControllerBase
 {
-    /// <summary>Get the current original's background preparation status.</summary>
+    /// <summary>Get the current original's background processing and OCR status.</summary>
     /// <remarks>
     /// Reads PostgreSQL without contacting RabbitMQ or MinIO. Queued means delivery or worker execution is pending.
-    /// ReadyForOcr means the original's size and SHA-256 were verified; OCR, indexing and AI have not run.
+    /// Processing verifies the original; RecognizingText runs OCR; OcrCompleted means text is stored at GET /api/Documents/{id}/text.
+    /// Indexing and AI summaries are subsequent stages and have not run. ReadyForOcr is a legacy preparation state.
     /// Replacing the original creates a new job. A category-only update preserves the job.
     /// </remarks>
     /// <param name="id">A positive document ID.</param>
@@ -29,11 +30,12 @@ public class DocumentProcessingController(IDocumentProcessingService service) : 
         return result is null ? NotFound() : Ok(result);
     }
 
-    /// <summary>Schedule a new preparation job after failure or for an original without a job.</summary>
+    /// <summary>Schedule a new OCR job after failure or for an original without a completed job.</summary>
     /// <remarks>
     /// Saves the new job and outgoing message atomically, including while RabbitMQ is unavailable.
     /// Transient storage failures are retried automatically before a job becomes Failed.
-    /// This operation resets the attempt counter and creates a new job ID. It cannot restart an active or ReadyForOcr job.
+    /// This operation resets the attempt counter and creates a new job ID. It also accepts legacy ReadyForOcr jobs.
+    /// It cannot restart an active job or an original with completed OCR.
     /// </remarks>
     /// <param name="id">A positive document ID.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>

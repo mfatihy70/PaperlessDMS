@@ -171,6 +171,43 @@ namespace Paperless.Infrastructure.Persistence.Migrations
                     b.ToTable("ProcessingJobs", "public");
                 });
 
+            modelBuilder.Entity("Paperless.Domain.Entities.DocumentText", b =>
+                {
+                    b.Property<int>("DocumentId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ExtractedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("PageCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(1000000)
+                        .HasColumnType("character varying(1000000)");
+
+                    b.HasKey("DocumentId");
+
+                    b.HasIndex("JobId")
+                        .IsUnique();
+
+                    b.ToTable("DocumentTexts", "public");
+                });
+
             modelBuilder.Entity("Paperless.Infrastructure.Persistence.FileCleanupJob", b =>
                 {
                     b.Property<string>("ObjectKey")
@@ -256,6 +293,15 @@ namespace Paperless.Infrastructure.Persistence.Migrations
                     b.HasOne("Paperless.Domain.Entities.Document", null)
                         .WithOne()
                         .HasForeignKey("Paperless.Domain.Entities.DocumentProcessingJob", "DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Paperless.Domain.Entities.DocumentText", b =>
+                {
+                    b.HasOne("Paperless.Domain.Entities.Document", null)
+                        .WithOne()
+                        .HasForeignKey("Paperless.Domain.Entities.DocumentText", "DocumentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

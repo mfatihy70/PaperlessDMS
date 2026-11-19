@@ -14,6 +14,7 @@ public class PaperlessDbContext : DbContext
     public DbSet<FileCleanupJob> FileCleanupJobs => Set<FileCleanupJob>();
     public DbSet<DocumentProcessingJob> ProcessingJobs => Set<DocumentProcessingJob>();
     public DbSet<ProcessingOutboxMessage> ProcessingOutbox => Set<ProcessingOutboxMessage>();
+    public DbSet<DocumentText> DocumentTexts => Set<DocumentText>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -69,6 +70,15 @@ public class PaperlessDbContext : DbContext
             entity.Property(message => message.LastError).HasMaxLength(512);
             entity.HasIndex(message => new { message.PublishedAt, message.AvailableAt });
             entity.HasIndex(message => new { message.DocumentId, message.JobId });
+        });
+        modelBuilder.Entity<DocumentText>(entity =>
+        {
+            entity.HasKey(text => text.DocumentId);
+            entity.HasOne<Document>().WithOne().HasForeignKey<DocumentText>(text => text.DocumentId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(text => text.JobId).IsUnique();
+            entity.Property(text => text.StorageKey).HasMaxLength(128);
+            entity.Property(text => text.Text).HasMaxLength(1_000_000);
+            entity.Property(text => text.Language).HasMaxLength(64);
         });
     }
 

@@ -69,6 +69,12 @@ services:
       dockerfile: src/Paperless.Worker/dockerfile
     container_name: paperless-worker
     restart: unless-stopped
+    init: true
+    mem_limit: 1g
+    cpus: 2.0
+    pids_limit: 64
+    tmpfs:
+      - /tmp:size=256m,mode=1777
     environment:
       - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=paperless_db;Username=paperless_user;Password=paperless_password;GSS Encryption Mode=Disable
       - Minio__Endpoint=minio:9000

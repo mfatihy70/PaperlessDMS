@@ -4,8 +4,8 @@ using Paperless.Application.Storage;
 
 namespace Paperless.Application.Services;
 
-/// <summary>Verifies the exact original referenced by a claimed job. OCR is a subsequent work package.</summary>
-public sealed class DocumentPreparation(IProcessingRepository repository, IFileStorage storage)
+/// <summary>Verifies the claimed original, recognizes its text and atomically saves the result and job status.</summary>
+public sealed class DocumentPreparation(IProcessingRepository repository, IFileStorage storage, IOcrEngine ocr)
 {
     // False means another worker still owns the lease. Keep the delivery unacknowledged and try again.
     public async Task<bool> TryProcessAsync(PrepareDocumentMessage message, CancellationToken cancellationToken)
@@ -17,10 +17,13 @@ public sealed class DocumentPreparation(IProcessingRepository repository, IFileS
         string? errorCode = null;
         string? error = null;
         var retryable = false;
+        OcrExtraction? extraction = null;
         try
         {
             var original = await storage.ReadAsync(message.StorageKey, cancellationToken);
             FileIntegrity.Verify(original, claim.FileSha256, claim.FileSizeBytes);
+            if (!await repository.StartOcrAsync(claim, cancellationToken)) return true;
+            extraction = await ocr.ExtractAsync(original, cancellationToken);
         }
         catch (FileStorageUnavailableException)
         {
@@ -33,7 +36,13 @@ public sealed class DocumentPreparation(IProcessingRepository repository, IFileS
             errorCode = "IntegrityCheckFailed";
             error = "The original is missing or its size or SHA-256 does not match the stored metadata.";
         }
-        await repository.FinishAsync(claim, errorCode, error, retryable, cancellationToken);
+        catch (OcrException exception)
+        {
+            errorCode = exception.Code;
+            error = exception.Message;
+            retryable = exception.Retryable;
+        }
+        await repository.FinishAsync(claim, extraction, errorCode, error, retryable, cancellationToken);
         return true;
     }
 }

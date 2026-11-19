@@ -22,4 +22,10 @@ public sealed class DocumentProcessingService(IProcessingRepository repository) 
     {
         if (id <= 0) throw new ApplicationValidationException("id", "The document ID must be positive.");
     }
+
+    public Task<DocumentTextDto?> GetTextAsync(int documentId, CancellationToken cancellationToken)
+    {
+        Validate(documentId);
+        return repository.GetTextAsync(documentId, cancellationToken);
+    }
 }

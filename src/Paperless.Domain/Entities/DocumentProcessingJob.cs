@@ -1,6 +1,6 @@
 namespace Paperless.Domain.Entities;
 
-public enum ProcessingState { Queued, Processing, RetryScheduled, ReadyForOcr, Failed }
+public enum ProcessingState { Queued, Processing, RetryScheduled, ReadyForOcr, Failed, RecognizingText, OcrCompleted }
 
 public class DocumentProcessingJob
 {
