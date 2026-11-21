@@ -3,7 +3,12 @@ import { provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { of, throwError, Subject } from 'rxjs';
 import { Dashboard } from './dashboard';
-import { DocumentService, DocumentItem, CategoryItem } from '../../services/document.service';
+import {
+  DocumentService,
+  DataChangeEvent,
+  DocumentItem,
+  CategoryItem,
+} from '../../services/document.service';
 
 describe('Dashboard Page', () => {
   let fixture: ComponentFixture<Dashboard>;
@@ -16,7 +21,9 @@ describe('Dashboard Page', () => {
     updateCategory: ReturnType<typeof vi.fn>;
     deleteCategory: ReturnType<typeof vi.fn>;
     deleteDocument: ReturnType<typeof vi.fn>;
+    dataChanged$: Subject<DataChangeEvent>;
   };
+  let dataChangedSubject: Subject<DataChangeEvent>;
 
   const mockDocs: DocumentItem[] = [
     {
@@ -47,6 +54,7 @@ describe('Dashboard Page', () => {
   ];
 
   beforeEach(async () => {
+    dataChangedSubject = new Subject<DataChangeEvent>();
     docServiceSpy = {
       getDocuments: vi.fn().mockReturnValue(of(mockDocs)),
       getCategories: vi.fn().mockReturnValue(of(mockCats)),
@@ -55,6 +63,7 @@ describe('Dashboard Page', () => {
       updateCategory: vi.fn(),
       deleteCategory: vi.fn(),
       deleteDocument: vi.fn(),
+      dataChanged$: dataChangedSubject,
     } as unknown as ReturnType<typeof vi.fn> & {
       getDocuments: ReturnType<typeof vi.fn>;
       getCategories: ReturnType<typeof vi.fn>;
@@ -63,6 +72,7 @@ describe('Dashboard Page', () => {
       updateCategory: ReturnType<typeof vi.fn>;
       deleteCategory: ReturnType<typeof vi.fn>;
       deleteDocument: ReturnType<typeof vi.fn>;
+      dataChanged$: Subject<DataChangeEvent>;
     };
 
     await TestBed.configureTestingModule({
@@ -84,6 +94,15 @@ describe('Dashboard Page', () => {
     expect(component.isLoading()).toBe(false);
   });
 
+  it('should reload document and category lists after a data change', () => {
+    fixture.detectChanges();
+
+    dataChangedSubject.next({ entity: 'category', action: 'updated' });
+
+    expect(docServiceSpy.getDocuments).toHaveBeenCalledTimes(2);
+    expect(docServiceSpy.getCategories).toHaveBeenCalledTimes(2);
+  });
+
   it('should filter documents by search keyword', () => {
     fixture.detectChanges();
 
@@ -102,7 +121,10 @@ describe('Dashboard Page', () => {
 
   it('should handle document upload delegation', () => {
     const file = new File(['bytes'], 'new.pdf', { type: 'application/pdf' });
-    docServiceSpy.uploadDocument.mockReturnValue(of(mockDocs[0]));
+    docServiceSpy.uploadDocument.mockImplementation(() => {
+      dataChangedSubject.next({ entity: 'document', action: 'created' });
+      return of(mockDocs[0]);
+    });
     fixture.detectChanges();
 
     component.handleUpload({
@@ -112,6 +134,8 @@ describe('Dashboard Page', () => {
 
     expect(docServiceSpy.uploadDocument).toHaveBeenCalledWith(file, null);
     expect(component.successMessage()).toContain('Document uploaded successfully!');
+    expect(docServiceSpy.getDocuments).toHaveBeenCalledTimes(2);
+    expect(docServiceSpy.getCategories).toHaveBeenCalledTimes(2);
   });
 
   it('should handle category delete and clear filter if active', () => {

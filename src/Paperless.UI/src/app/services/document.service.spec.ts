@@ -3,6 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import {
   DocumentService,
+  DataChangeEvent,
   DocumentItem,
   CategoryItem,
   CreateCategoryDto,
@@ -21,6 +22,12 @@ describe('DocumentService', () => {
     service = TestBed.inject(DocumentService);
     httpMock = TestBed.inject(HttpTestingController);
   });
+
+  function observeChanges(): DataChangeEvent[] {
+    const changes: DataChangeEvent[] = [];
+    service.dataChanged$.subscribe((change) => changes.push(change));
+    return changes;
+  }
 
   afterEach(() => {
     httpMock.verify();
@@ -76,6 +83,7 @@ describe('DocumentService', () => {
     });
 
     it('uploadDocument() sends the original file and category as multipart data', () => {
+      const changes = observeChanges();
       const file = new File(['bytes'], 'document.odt', {
         type: 'application/vnd.oasis.opendocument.text',
       });
@@ -101,9 +109,11 @@ describe('DocumentService', () => {
       expect(uploadedFile.name).toBe(file.name);
       expect(uploadedFile.size).toBe(file.size);
       expect((req.request.body as FormData).get('categoryId')).toBe('3');
+      expect(changes).toEqual([{ entity: 'document', action: 'created' }]);
     });
 
     it('updateDocument() sends an optional replacement file and category', () => {
+      const changes = observeChanges();
       const file = new File(['text'], 'updated.md', { type: 'text/markdown' });
 
       service.updateDocument(10, file, null).subscribe();
@@ -115,14 +125,27 @@ describe('DocumentService', () => {
       expect(replacementFile.size).toBe(file.size);
       expect((req.request.body as FormData).get('categoryId')).toBe('');
       req.flush(null);
+      expect(changes).toEqual([{ entity: 'document', action: 'updated' }]);
     });
 
     it('deleteDocument() should send DELETE /api/documents/:id', () => {
+      const changes = observeChanges();
       service.deleteDocument(10).subscribe();
 
       const req = httpMock.expectOne('/api/documents/10');
       expect(req.request.method).toBe('DELETE');
       req.flush(null);
+      expect(changes).toEqual([{ entity: 'document', action: 'deleted' }]);
+    });
+
+    it('does not notify listeners when a document mutation fails', () => {
+      const changes = observeChanges();
+      service.deleteDocument(10).subscribe({ error: () => undefined });
+
+      const req = httpMock.expectOne('/api/documents/10');
+      req.flush('Failed', { status: 500, statusText: 'Server Error' });
+
+      expect(changes).toEqual([]);
     });
   });
 
@@ -141,6 +164,7 @@ describe('DocumentService', () => {
     });
 
     it('createCategory() should send POST /api/categories', () => {
+      const changes = observeChanges();
       const newCat: CreateCategoryDto = { name: 'Health', description: 'Medical records' };
       const createdCat: CategoryItem = { id: 2, ...newCat };
 
@@ -152,9 +176,11 @@ describe('DocumentService', () => {
       expect(req.request.method).toBe('POST');
       expect(req.request.body).toEqual(newCat);
       req.flush(createdCat);
+      expect(changes).toEqual([{ entity: 'category', action: 'created' }]);
     });
 
     it('updateCategory() should send PUT /api/categories/:id', () => {
+      const changes = observeChanges();
       const updateCat: UpdateCategoryDto = { name: 'Health & Care', description: 'Updated' };
 
       service.updateCategory(2, updateCat).subscribe();
@@ -163,14 +189,17 @@ describe('DocumentService', () => {
       expect(req.request.method).toBe('PUT');
       expect(req.request.body).toEqual(updateCat);
       req.flush(null);
+      expect(changes).toEqual([{ entity: 'category', action: 'updated' }]);
     });
 
     it('deleteCategory() should send DELETE /api/categories/:id', () => {
+      const changes = observeChanges();
       service.deleteCategory(2).subscribe();
 
       const req = httpMock.expectOne('/api/categories/2');
       expect(req.request.method).toBe('DELETE');
       req.flush(null);
+      expect(changes).toEqual([{ entity: 'category', action: 'deleted' }]);
     });
   });
 });
