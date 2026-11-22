@@ -1,12 +1,20 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { of, Subject } from 'rxjs';
 import { App } from './app';
+import { DocumentService } from './services/document.service';
 
 describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideRouter([])],
+      providers: [
+        provideRouter([]),
+        {
+          provide: DocumentService,
+          useValue: { getDocuments: () => of([]), dataChanged$: new Subject() },
+        },
+      ],
     }).compileComponents();
   });
 

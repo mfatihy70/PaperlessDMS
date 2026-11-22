@@ -1,4 +1,5 @@
-import { Component, OnInit, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject, signal, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { forkJoin } from 'rxjs';
 import {
   DocumentService,
@@ -19,6 +20,7 @@ import { DocumentTable } from '../../components/document-table/document-table';
   styleUrls: ['./dashboard.scss'],
 })
 export class Dashboard implements OnInit {
+  private readonly destroyRef = inject(DestroyRef);
   docFormRef = viewChild<DocumentForm>(DocumentForm);
   catFormRef = viewChild<CategoryForm>(CategoryForm);
 
@@ -39,6 +41,9 @@ export class Dashboard implements OnInit {
   constructor(private api: DocumentService) {}
 
   ngOnInit(): void {
+    this.api.dataChanged$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.loadData());
     this.loadData();
   }
 
@@ -57,7 +62,7 @@ export class Dashboard implements OnInit {
         this.isLoading.set(false);
       },
       error: (err) => {
-        this.errorMessage.set('Backend service starting up or unreachable. Click refresh.');
+        this.errorMessage.set('Backend service starting up or unreachable.');
         this.isLoading.set(false);
       },
     });
@@ -93,7 +98,6 @@ export class Dashboard implements OnInit {
         this.showSuccess('Document uploaded successfully!');
         this.docFormRef()?.reset();
         this.isSavingDoc.set(false);
-        this.loadData();
       },
       error: (err) => {
         this.errorMessage.set('Upload failed: ' + err.message);
@@ -109,7 +113,6 @@ export class Dashboard implements OnInit {
         this.showSuccess('Category created!');
         this.catFormRef()?.reset();
         this.isSavingCat.set(false);
-        this.loadData();
       },
       error: (err) => {
         this.errorMessage.set('Category creation failed: ' + err.message);
@@ -129,7 +132,6 @@ export class Dashboard implements OnInit {
         this.catFormRef()?.cancelEdit();
         this.isSavingCat.set(false);
         this.showSuccess('Category updated!');
-        this.loadData();
       },
       error: (err) => {
         this.errorMessage.set('Category update failed: ' + err.message);
@@ -143,9 +145,9 @@ export class Dashboard implements OnInit {
       next: () => {
         if (this.selectedCatId() === id) {
           this.selectedCatId.set(null);
+          this.applyFilter();
         }
         this.showSuccess('Category deleted.');
-        this.loadData();
       },
       error: (err) => this.errorMessage.set('Category deletion failed: ' + err.message),
     });
@@ -155,7 +157,6 @@ export class Dashboard implements OnInit {
     this.api.deleteDocument(id).subscribe({
       next: () => {
         this.showSuccess('Document deleted.');
-        this.loadData();
       },
       error: (err) => this.errorMessage.set('Delete failed: ' + err.message),
     });

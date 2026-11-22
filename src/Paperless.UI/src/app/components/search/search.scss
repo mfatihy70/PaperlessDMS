@@ -1,0 +1,14 @@
+.document-search {
+  position: relative;
+  width: min(100%, 24rem);
+}
+
+.search-results {
+  position: absolute;
+  z-index: 1050;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  left: 0;
+  max-height: 20rem;
+  overflow-y: auto;
+}
